@@ -65,24 +65,30 @@ jobs:
           fi
         fi
 
-        # 2. BẬT ANDROIDX VÀ HỖ TRỢ ANDROID 15
+        # 2. SỬA LỖI CRASH DATABASE (VÔ HIỆU HÓA LỆNH GÂY VĂNG APP TRONG ONCREATE)
+        find . -name "DatabaseHelper.kt" -exec sed -i 's/db.enableWriteAheadLogging()/\/\/ db.enableWriteAheadLogging()/g' {} +
+
+        # 3. BỔ SUNG QUYỀN PIN VÀO MANIFEST
+        find . -name "AndroidManifest.xml" -exec sed -i '/ACCESS_COARSE_LOCATION/a \    ' {} +
+
+        # 4. BẬT ANDROIDX VÀ HỖ TRỢ ANDROID 15
         echo "android.useAndroidX=true" > gradle.properties
         echo "android.nonTransitiveRClass=true" >> gradle.properties
         echo "android.suppressUnsupportedCompileSdk=35" >> gradle.properties
 
-        # 3. TỰ ĐỘNG SỬA LỖI KÝ TỰ & TRONG FILE XML THÀNH CHỮ 'VÀ'
+        # 5. SỬA LỖI KÝ TỰ & TRONG FILE XML
         find . -name "*.xml" -exec sed -i 's/ & / và /g' {} +
 
-        # 4. Tạo trình khởi chạy Gradle
+        # 6. Tạo trình khởi chạy Gradle
         if [ ! -f gradlew ]; then
           gradle wrapper
         fi
         chmod +x gradlew
 
-        # 5. Tiến hành biên dịch APK
+        # 7. Tiến hành biên dịch APK
         ./gradlew assembleDebug --stacktrace
 
-        # 6. Gom file APK để sẵn sàng tải về
+        # 8. Gom file APK để tải về
         mkdir -p $GITHUB_WORKSPACE/apk_output
         find . -name "*.apk" -exec cp {} $GITHUB_WORKSPACE/apk_output/ \;
 
