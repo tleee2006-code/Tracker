@@ -65,21 +65,24 @@ jobs:
           fi
         fi
 
-        # 2. BẬT ANDROIDX VÀ HỖ TRỢ ANDROID 15 (SỬA LỖI TRONG ẢNH)
+        # 2. BẬT ANDROIDX VÀ HỖ TRỢ ANDROID 15
         echo "android.useAndroidX=true" > gradle.properties
         echo "android.nonTransitiveRClass=true" >> gradle.properties
         echo "android.suppressUnsupportedCompileSdk=35" >> gradle.properties
 
-        # 3. Tạo trình khởi chạy Gradle
+        # 3. TỰ ĐỘNG SỬA LỖI KÝ TỰ & TRONG FILE XML THÀNH CHỮ 'VÀ'
+        find . -name "*.xml" -exec sed -i 's/ & / và /g' {} +
+
+        # 4. Tạo trình khởi chạy Gradle
         if [ ! -f gradlew ]; then
           gradle wrapper
         fi
         chmod +x gradlew
 
-        # 4. Tiến hành biên dịch APK
+        # 5. Tiến hành biên dịch APK
         ./gradlew assembleDebug --stacktrace
 
-        # 5. Gom file APK để sẵn sàng tải về
+        # 6. Gom file APK để sẵn sàng tải về
         mkdir -p $GITHUB_WORKSPACE/apk_output
         find . -name "*.apk" -exec cp {} $GITHUB_WORKSPACE/apk_output/ \;
 
