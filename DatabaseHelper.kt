@@ -10,43 +10,43 @@ import java.util.Locale
 
 data class Shift(
     val id: Long = 0,
-    val date: String,             // Định dạng: yyyy-MM-dd (ví dụ: 2026-10-02)
-    val shiftName: String,        // Ví dụ: "Ca 1 (Sáng)", "Ca 2 (Chiều)"
-    val startTime: String,        // Ví dụ: "07:30"
-    val endTime: String,          // Ví dụ: "11:45"
-    val distanceKm: Double,       // Quãng đường ca (km)
-    val revenue: Long,            // Doanh thu thu được từ app ship (VNĐ)
-    val fuelCost: Long,           // Tiền xăng tính cho ca (VNĐ)
-    val otherCost: Long,          // Chi phí khác: ăn uống, nước, gửi xe (VNĐ)
-    val netProfit: Long           // Lợi nhuận ròng = Doanh thu - Xăng - Chi phí
+    val date: String,             // yyyy-MM-dd
+    val shiftName: String,        // "Ca 1 (Sáng)"
+    val startTime: String,        // "07:30"
+    val endTime: String,          // "11:45"
+    val distanceKm: Double,       // km
+    val revenue: Long,            // Doanh thu (VNĐ)
+    val fuelCost: Long,           // Tiền xăng (VNĐ)
+    val otherCost: Long,          // Chi phí khác (VNĐ)
+    val netProfit: Long           // Lợi nhuận ròng (VNĐ)
 )
 
 data class DailySummary(
-    val date: String,             // yyyy-MM-dd
-    val shiftCount: Int,          // Số ca chạy trong ngày
-    val totalDistanceKm: Double,  // Tổng km các ca
-    val totalRevenue: Long,       // Tổng doanh thu ngày
-    val totalFuelCost: Long,      // Tổng tiền xăng ngày
-    val totalProfit: Long         // Tổng lợi nhuận ròng ngày
+    val date: String,
+    val shiftCount: Int,
+    val totalDistanceKm: Double,
+    val totalRevenue: Long,
+    val totalFuelCost: Long,
+    val totalProfit: Long
 )
 
 data class FuelRefill(
     val id: Long = 0,
     val date: String,
     val time: String,
-    val amountPaid: Long,         // Số tiền đổ xăng (VNĐ)
-    val fuelPrice: Long,          // Giá xăng lúc đổ (VNĐ/lít)
-    val liters: Double,           // Số lít xăng
-    val totalAppKm: Double,       // Mốc tổng km lúc bấm đổ xăng
-    val kmSinceLast: Double,      // Số km chạy được từ lần đổ trước
-    val costPerKm: Double         // Chi phí VNĐ / km
+    val amountPaid: Long,
+    val fuelPrice: Long,
+    val liters: Double,
+    val totalAppKm: Double,
+    val kmSinceLast: Double,
+    val costPerKm: Double
 )
 
 class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
 
     companion object {
         const val DATABASE_NAME = "shipper_tracker.db"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
 
         const val TABLE_SHIFTS = "shifts"
         const val TABLE_FUEL = "fuel_refills"
@@ -54,10 +54,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     }
 
     override fun onCreate(db: SQLiteDatabase) {
-        // Bật chế độ Write-Ahead Logging để chống xung đột ghi đĩa khi chạy ngầm
-        db.enableWriteAheadLogging()
-
-        // Bảng lưu từng ca chạy riêng biệt
         db.execSQL("""
             CREATE TABLE $TABLE_SHIFTS (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,7 +69,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             )
         """.trimIndent())
 
-        // Bảng lưu lịch sử đổ xăng
         db.execSQL("""
             CREATE TABLE $TABLE_FUEL (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +83,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             )
         """.trimIndent())
 
-        // Bảng lưu trạng thái tổng Odometer toàn hệ thống
         db.execSQL("""
             CREATE TABLE $TABLE_STATE (
                 key TEXT PRIMARY KEY,
@@ -101,13 +95,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_SHIFTS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_FUEL")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_STATE")
-        onCreate(db)
+        // Upgrade an toàn nếu cần
     }
 
-    // --- Xử lý Odometer Tổng ---
     fun getTotalOdometer(): Double {
         val db = readableDatabase
         val cursor = db.rawQuery("SELECT value FROM $TABLE_STATE WHERE key = 'total_odometer_km'", null)
@@ -127,7 +117,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         db.update(TABLE_STATE, cv, "key = 'total_odometer_km'", null)
     }
 
-    // --- Lưu Ca Chạy ---
     fun insertShift(shift: Shift): Long {
         val db = writableDatabase
         val cv = ContentValues().apply {
@@ -142,13 +131,11 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             put("net_profit", shift.netProfit)
         }
         val id = db.insert(TABLE_SHIFTS, null, cv)
-        // Cập nhật Odometer
         val currentOdo = getTotalOdometer()
         setTotalOdometer(currentOdo + shift.distanceKm)
         return id
     }
 
-    // Lấy số ca đã chạy trong ngày hôm nay để tự động đặt tên "Ca 1", "Ca 2"...
     fun getTodayShiftCount(todayStr: String): Int {
         val db = readableDatabase
         val cursor = db.rawQuery("SELECT COUNT(*) FROM $TABLE_SHIFTS WHERE date = ?", arrayOf(todayStr))
@@ -160,7 +147,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return count
     }
 
-    // --- Thống kê danh sách theo từng Ngày (Nhóm nhiều ca/ngày) ---
     fun getDailySummaries(): List<DailySummary> {
         val list = mutableListOf<DailySummary>()
         val db = readableDatabase
@@ -195,7 +181,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return list
     }
 
-    // Lấy chi tiết tất cả các ca trong một ngày cụ thể
     fun getShiftsByDate(dateStr: String): List<Shift> {
         val list = mutableListOf<Shift>()
         val db = readableDatabase
@@ -223,12 +208,43 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return list
     }
 
-    // --- Xử lý Đổ Xăng ---
+    // --- CÁC HÀM XÓA DỮ LIỆU THEO YÊU CẦU ---
+    fun deleteShiftsByDate(dateStr: String) {
+        val db = writableDatabase
+        db.delete(TABLE_SHIFTS, "date = ?", arrayOf(dateStr))
+        recalculateOdometer()
+    }
+
+    fun deleteShiftById(id: Long) {
+        val db = writableDatabase
+        db.delete(TABLE_SHIFTS, "id = ?", arrayOf(id.toString()))
+        recalculateOdometer()
+    }
+
+    fun clearAllData() {
+        val db = writableDatabase
+        db.delete(TABLE_SHIFTS, null, null)
+        db.delete(TABLE_FUEL, null, null)
+        setTotalOdometer(0.0)
+        val cv = ContentValues().apply { put("value", "0.0") }
+        db.update(TABLE_STATE, cv, "key = 'last_refill_km'", null)
+    }
+
+    private fun recalculateOdometer() {
+        val db = writableDatabase
+        val cursor = db.rawQuery("SELECT SUM(distance_km) FROM $TABLE_SHIFTS", null)
+        var total = 0.0
+        if (cursor.moveToFirst()) {
+            total = cursor.getDouble(0)
+        }
+        cursor.close()
+        setTotalOdometer(total)
+    }
+
     fun recordFuelRefill(amount: Long, price: Long): FuelRefill {
         val db = writableDatabase
         val currentOdo = getTotalOdometer()
 
-        // Lấy mốc km lần đổ trước
         var lastKm = 0.0
         val cursor = db.rawQuery("SELECT value FROM $TABLE_STATE WHERE key = 'last_refill_km'", null)
         if (cursor.moveToFirst()) {
@@ -256,7 +272,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         }
         val id = db.insert(TABLE_FUEL, null, cv)
 
-        // Cập nhật mốc mới
         val cvUpdate = ContentValues().apply { put("value", currentOdo.toString()) }
         db.update(TABLE_STATE, cvUpdate, "key = 'last_refill_km'", null)
 

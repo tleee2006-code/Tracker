@@ -3,14 +3,18 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:fitsSystemWindows="true"
     android:background="@color/bg_dark">
 
-    <!-- Top App Bar -->
+    <!-- Top App Bar with safe padding -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/card_dark"
-        android:padding="16dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
@@ -20,7 +24,7 @@
             android:layout_weight="1"
             android:text="🚴 SHIPPER TRACKER"
             android:textColor="@color/text_main"
-            android:textSize="18sp"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
         <TextView
@@ -29,7 +33,7 @@
             android:layout_height="wrap_content"
             android:text="Tổng: 0.0 km"
             android:textColor="@color/accent_blue"
-            android:textSize="13sp"
+            android:textSize="14sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -47,9 +51,10 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Ca Chạy"
+            android:text="CA CHẠY"
             android:textColor="@color/accent_blue"
-            android:textSize="12sp" />
+            android:textStyle="bold"
+            android:textSize="13sp" />
 
         <Button
             android:id="@+id/btn_tab_history"
@@ -57,9 +62,9 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1.2"
-            android:text="Theo Ngày (Nhiều Ca)"
+            android:text="THEO NGÀY"
             android:textColor="@color/text_muted"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
 
         <Button
             android:id="@+id/btn_tab_fuel"
@@ -67,9 +72,9 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Đổ Xăng"
+            android:text="ĐỔ XĂNG"
             android:textColor="@color/text_muted"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
     </LinearLayout>
 
     <!-- Frame Content Views -->
@@ -78,19 +83,21 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- TAB 1: CA CHẠY HIỆN TẠI -->
+        <!-- TAB 1: CA CHẠY HIỆN TẠI (CĂN GIỮA TRUNG TÂM) -->
         <ScrollView
             android:id="@+id/view_tracker"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:padding="16dp">
+            android:fillViewport="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="20dp">
 
-                <!-- Odometer Card -->
+                <!-- Odometer Card căn giữa hoàn toàn -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -103,33 +110,39 @@
                         android:id="@+id/tv_shift_title"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="CHƯA CÓ CA NÀO ĐANG CHẠY"
+                        android:text="CHƯA BẬT CA CHẠY"
                         android:textColor="@color/text_muted"
-                        android:textSize="13sp"
+                        android:textSize="14sp"
                         android:textStyle="bold" />
 
+                    <!-- Số KM đi được căn giữa lớn -->
                     <TextView
                         android:id="@+id/tv_shift_km"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="0.00"
                         android:textColor="@color/accent_blue"
-                        android:textSize="56sp"
-                        android:textStyle="bold" />
+                        android:textSize="64sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="4dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="KILOMÉT"
                         android:textColor="@color/text_muted"
-                        android:textSize="12sp" />
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
 
+                    <!-- Thời gian hoạt động & Trạng thái GPS ở trung tâm -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:layout_marginTop="20dp"
-                        android:paddingTop="14dp">
+                        android:paddingTop="16dp"
+                        android:background="#12171F"
+                        android:padding="12dp">
 
                         <LinearLayout
                             android:layout_width="0dp"
@@ -140,18 +153,23 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Thời gian ca"
+                                android:text="Tổng giờ hoạt động"
                                 android:textColor="@color/text_muted"
-                                android:textSize="11sp" />
+                                android:textSize="12sp" />
                             <TextView
                                 android:id="@+id/tv_shift_time"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="00:00:00"
                                 android:textColor="@color/text_main"
-                                android:textSize="16sp"
+                                android:textSize="20sp"
                                 android:textStyle="bold" />
                         </LinearLayout>
+
+                        <View
+                            android:layout_width="1dp"
+                            android:layout_height="match_parent"
+                            android:background="@color/card_border" />
 
                         <LinearLayout
                             android:layout_width="0dp"
@@ -162,16 +180,16 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Vận tốc GPS"
+                                android:text="Trạng thái GPS (1s)"
                                 android:textColor="@color/text_muted"
-                                android:textSize="11sp" />
+                                android:textSize="12sp" />
                             <TextView
                                 android:id="@+id/tv_shift_speed"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="0 km/h"
                                 android:textColor="@color/accent_orange"
-                                android:textSize="16sp"
+                                android:textSize="20sp"
                                 android:textStyle="bold" />
                         </LinearLayout>
                     </LinearLayout>
@@ -181,10 +199,10 @@
                 <Button
                     android:id="@+id/btn_start_shift"
                     android:layout_width="match_parent"
-                    android:layout_height="60dp"
+                    android:layout_height="64dp"
                     android:layout_marginTop="20dp"
                     android:text="▶ BẮT ĐẦU CA MỚI"
-                    android:textSize="16sp"
+                    android:textSize="17sp"
                     android:textStyle="bold"
                     android:backgroundTint="@color/accent_green" />
 
@@ -200,17 +218,19 @@
                     <Button
                         android:id="@+id/btn_pause_shift"
                         android:layout_width="0dp"
-                        android:layout_height="60dp"
+                        android:layout_height="64dp"
                         android:layout_weight="1"
                         android:layout_marginEnd="8dp"
-                        android:text="⏸ Tạm dừng"
+                        android:text="⏸ TẠM DỪNG"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
                         android:backgroundTint="@color/card_border"
                         android:textColor="@color/text_main" />
 
                     <Button
                         android:id="@+id/btn_stop_shift"
                         android:layout_width="0dp"
-                        android:layout_height="60dp"
+                        android:layout_height="64dp"
                         android:layout_weight="1.2"
                         android:text="⏹ KẾT THÚC CA"
                         android:textSize="15sp"
@@ -222,23 +242,17 @@
                 <Button
                     android:id="@+id/btn_quick_refill"
                     android:layout_width="match_parent"
-                    android:layout_height="50dp"
+                    android:layout_height="52dp"
                     android:layout_marginTop="16dp"
                     android:text="⛽ GHI NHẬN ĐỔ XĂNG (+ XĂNG)"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
                     android:backgroundTint="@color/accent_blue" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="ℹ️ Lưu ý Android 15: Khi bấm 'Bắt đầu ca', GPS chạy ngầm ổn định. Khi bấm 'Kết thúc ca', GPS tắt 100% không tốn pin."
-                    android:textColor="@color/text_muted"
-                    android:textSize="12sp"
-                    android:gravity="center" />
             </LinearLayout>
         </ScrollView>
 
-        <!-- TAB 2: LỊCH SỬ THEO NGÀY (CHIA RÕ TỪNG CA) -->
+        <!-- TAB 2: LỊCH SỬ THEO NGÀY (CÓ NÚT XÓA DỮ LIỆU) -->
         <LinearLayout
             android:id="@+id/view_history"
             android:layout_width="match_parent"
@@ -247,13 +261,30 @@
             android:padding="16dp"
             android:visibility="gone">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Lịch sử các ngày chạy (Chạm vào ngày để xem từng ca)"
-                android:textColor="@color/text_muted"
-                android:textSize="13sp"
-                android:layout_marginBottom="12dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Lịch sử các ngày chạy"
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/btn_clear_all_history"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🗑️ Xóa tất cả"
+                    android:textColor="@color/accent_red"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
             <ListView
                 android:id="@+id/list_daily_history"
@@ -275,7 +306,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Lịch sử các lần đổ xăng & Chi phí/km"
+                android:text="Lịch sử các lần đổ xăng và Chi phí/km"
                 android:textColor="@color/text_muted"
                 android:textSize="13sp"
                 android:layout_marginBottom="12dp" />

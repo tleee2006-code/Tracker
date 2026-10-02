@@ -95,8 +95,8 @@
                 android:id="@+id/item_total_profit"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="+510.000 đ"
-                android:textColor="@color/accent_green"
+                android:text="+0 đ"
+                android:textColor="@color/accent_blue"
                 android:textSize="14sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -106,7 +106,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="👉 Chạm để xem chi tiết từng ca trong ngày"
+        android:text="👉 Chạm để xem hoặc xóa từng ca trong ngày"
         android:textColor="@color/text_muted"
         android:textSize="11sp" />
 </LinearLayout>
