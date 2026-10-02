@@ -239,6 +239,15 @@
                             android:textSize="15sp"
                             android:textStyle="bold" />
                     </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tv_gps_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📡 Trạng thái GPS: Đang quét vệ tinh..."
+                        android:textColor="@color/accent_blue"
+                        android:textSize="12sp"
+                        android:layout_marginTop="8dp" />
                 </LinearLayout>
 
                 <!-- Start Button (Khi chưa chạy - 1 CHẠM ĂN NGAY) -->

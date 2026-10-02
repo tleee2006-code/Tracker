@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvActiveShiftTitle: TextView
     private lateinit var tvShiftKm: TextView
     private lateinit var tvShiftTime: TextView
+    private lateinit var tvGpsStatus: TextView
 
     private lateinit var btnStartShift: Button
     private lateinit var layoutRunningControls: LinearLayout
@@ -106,6 +107,7 @@ class MainActivity : AppCompatActivity() {
                 val seconds = intent.getLongExtra(GpsTrackingService.EXTRA_DURATION_SEC, 0L)
                 val paused = intent.getBooleanExtra(GpsTrackingService.EXTRA_IS_PAUSED, false)
                 val standby = intent.getBooleanExtra(GpsTrackingService.EXTRA_IS_STANDBY, false)
+                val gpsStatus = intent.getStringExtra(GpsTrackingService.EXTRA_GPS_STATUS) ?: ""
 
                 val speedStr = when {
                     paused -> "Tạm dừng"
@@ -114,6 +116,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 tvShiftKm.text = String.format(Locale.US, "Ca: %.2f km (%s)", km, speedStr)
                 tvShiftTime.text = formatSeconds(seconds)
+                if (gpsStatus.isNotEmpty()) {
+                    tvGpsStatus.text = gpsStatus
+                }
 
                 val currentTodayKm = baseTodayKm + km
                 val currentTodaySec = baseTodaySeconds + seconds
@@ -128,7 +133,9 @@ class MainActivity : AppCompatActivity() {
     ) { permissions ->
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         if (!fineLocationGranted) {
-            Toast.makeText(this, "Cần cấp quyền vị trí chính xác để đo quãng đường!", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Cần cấp quyền 'Vị trí chính xác' để đo quãng đường!", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this, "Đã cấp quyền vị trí chính xác!", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -178,6 +185,7 @@ class MainActivity : AppCompatActivity() {
         tvActiveShiftTitle = findViewById(R.id.tv_active_shift_title)
         tvShiftKm = findViewById(R.id.tv_shift_km)
         tvShiftTime = findViewById(R.id.tv_shift_time)
+        tvGpsStatus = findViewById(R.id.tv_gps_status)
 
         btnStartShift = findViewById(R.id.btn_start_shift)
         layoutRunningControls = findViewById(R.id.layout_running_controls)
@@ -211,7 +219,7 @@ class MainActivity : AppCompatActivity() {
             loadFuelHistory()
         }
 
-        // BẮT ĐẦU CA: 1 CHẠM DUY NHẤT LÀ CHẠY NGAY
+        // BẮT ĐẦU CA: KIỂM TRA QUYỀN RỒI CHẠY NGAY
         btnStartShift.setOnClickListener {
             startShiftInstantly()
         }
@@ -284,6 +292,7 @@ class MainActivity : AppCompatActivity() {
             btnStartShift.visibility = View.GONE
             layoutRunningControls.visibility = View.VISIBLE
             cardActiveShift.visibility = View.VISIBLE
+            tvGpsStatus.text = GpsTrackingService.currentGpsStatus
 
             if (GpsTrackingService.isStandby) {
                 btnStandbyShift.text = "🛵 TIẾP TỤC LĂN BÁNH (BẬT GPS)"
@@ -305,8 +314,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 1 CHẠM BẮT ĐẦU CA
+    // 1 CHẠM BẮT ĐẦU CA: CÓ KIỂM TRA QUYỀN AN TOÀN TRƯỚC
     private fun startShiftInstantly() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "Vui lòng cấp quyền 'Vị trí chính xác' để bắt đầu ca!", Toast.LENGTH_LONG).show()
+            checkAndRequestPermissions()
+            return
+        }
+
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val count = dbHelper.getTodayStats(todayStr).third
         activeShiftName = "Ca ${count + 1}"
@@ -315,6 +330,8 @@ class MainActivity : AppCompatActivity() {
         GpsTrackingService.isRunning = true
         GpsTrackingService.isPaused = false
         GpsTrackingService.isStandby = false
+        GpsTrackingService.currentGpsStatus = "🟢 Đang kết nối GPS phần cứng..."
+
         btnStartShift.visibility = View.GONE
         layoutRunningControls.visibility = View.VISIBLE
         cardActiveShift.visibility = View.VISIBLE
@@ -325,6 +342,7 @@ class MainActivity : AppCompatActivity() {
         tvActiveShiftTitle.text = "● ĐANG BẬT GPS: $activeShiftName"
         tvShiftKm.text = "Ca: 0.00 km"
         tvShiftTime.text = "00:00:00"
+        tvGpsStatus.text = "🟢 Đang kết nối GPS phần cứng..."
 
         val serviceIntent = Intent(this, GpsTrackingService::class.java).apply {
             action = GpsTrackingService.ACTION_START
@@ -337,58 +355,66 @@ class MainActivity : AppCompatActivity() {
             startService(serviceIntent)
         }
 
-        Toast.makeText(this, "Đã bật định vị 1s/lần cho $activeShiftName!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Đã kích hoạt GPS phần cứng cho $activeShiftName!", Toast.LENGTH_SHORT).show()
     }
 
-    // 1 CHẠM BẬT / TẮT CHẾ ĐỘ CHỜ (TẮT GPS, ĐỒNG HỒ VẪN CHẠY)
+    // 1 CHẠM BẬT / TẮT CHẾ ĐỘ CHỜ (NGẮT GPS PHẦN CỨNG 100%, ĐỒNG HỒ VẪN CHẠY)
     private fun toggleStandbyInstantly() {
         if (!GpsTrackingService.isRunning) return
 
         if (!GpsTrackingService.isStandby) {
             // VÀO CHẾ ĐỘ CHỜ: TẮT GPS NGAY
             GpsTrackingService.isStandby = true
+            GpsTrackingService.currentGpsStatus = "☕ Chế độ chờ (Đã ngắt GPS, đồng hồ chạy)"
             btnStandbyShift.text = "🛵 TIẾP TỤC LĂN BÁNH (BẬT GPS)"
             btnStandbyShift.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_green)
             tvActiveShiftTitle.text = "☕ CHẾ ĐỘ CHỜ: $activeShiftName (ĐÃ TẮT GPS)"
+            tvGpsStatus.text = "☕ Chế độ chờ (Đã ngắt GPS, đồng hồ chạy)"
 
             val intent = Intent(this, GpsTrackingService::class.java).apply {
                 action = GpsTrackingService.ACTION_STANDBY
             }
             startService(intent)
-            Toast.makeText(this, "Đã tắt GPS! Đồng hồ ca vẫn tính thời gian bình thường.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Đã ngắt GPS phần cứng! Đang tính thời gian ca.", Toast.LENGTH_SHORT).show()
         } else {
             // LĂN BÁNH LẠI: BẬT LẠI GPS 1S/LẦN
             GpsTrackingService.isStandby = false
+            GpsTrackingService.currentGpsStatus = "🟢 Đang kết nối GPS 1s/lần..."
             btnStandbyShift.text = "☕ CHẾ ĐỘ CHỜ (VÀO QUÁN / TẮT GPS)"
             btnStandbyShift.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_orange)
             tvActiveShiftTitle.text = "● ĐANG BẬT GPS: $activeShiftName"
+            tvGpsStatus.text = "🟢 Đang kết nối GPS 1s/lần..."
 
             val intent = Intent(this, GpsTrackingService::class.java).apply {
                 action = GpsTrackingService.ACTION_RESUME_STANDBY
             }
             startService(intent)
-            Toast.makeText(this, "Đã bật lại định vị GPS 1s/lần!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Đã bật lại định vị GPS phần cứng!", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // 1 CHẠM TẠM DỪNG / TIẾP TỤC
+    // 1 CHẠM TẠM DỪNG / TIẾP TỤC (CŨNG NGẮT / BẬT LẠI GPS PHẦN CỨNG)
     private fun togglePauseInstantly() {
         if (GpsTrackingService.isPaused) {
             GpsTrackingService.isPaused = false
+            GpsTrackingService.currentGpsStatus = "🟢 Đang kết nối GPS 1s/lần..."
             val intent = Intent(this, GpsTrackingService::class.java).apply {
                 action = GpsTrackingService.ACTION_RESUME
             }
             startService(intent)
             btnPauseShift.text = "⏸ TẠM DỪNG"
             tvActiveShiftTitle.text = if (GpsTrackingService.isStandby) "☕ CHẾ ĐỘ CHỜ: $activeShiftName (ĐÃ TẮT GPS)" else "● ĐANG BẬT GPS: $activeShiftName"
+            tvGpsStatus.text = "🟢 Đang kết nối GPS 1s/lần..."
         } else {
             GpsTrackingService.isPaused = true
+            GpsTrackingService.currentGpsStatus = "⏸ Đã tạm dừng (Đã ngắt GPS)"
             val intent = Intent(this, GpsTrackingService::class.java).apply {
                 action = GpsTrackingService.ACTION_PAUSE
             }
             startService(intent)
             btnPauseShift.text = "▶ TIẾP TỤC"
             tvActiveShiftTitle.text = "⏸ ĐÃ TẠM DỪNG: $activeShiftName"
+            tvGpsStatus.text = "⏸ Đã tạm dừng (Đã ngắt GPS)"
         }
     }
 
