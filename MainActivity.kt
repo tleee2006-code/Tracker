@@ -265,12 +265,7 @@ class MainActivity : AppCompatActivity() {
     private fun startShiftInstantly() {
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val count = dbHelper.getTodayStats(todayStr).third
-        activeShiftName = "Ca ${count + 1} (" + when (count) {
-            0 -> "Sáng"
-            1 -> "Chiều"
-            2 -> "Tối"
-            else -> "Đêm"
-        } + ")"
+activeShiftName = "Ca ${count + 1}"
         activeShiftStartTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
 
         // Đổi giao diện 1 chạm ngay tức thì
