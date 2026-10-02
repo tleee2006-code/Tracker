@@ -19,16 +19,68 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Build Debug APK
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.7'
+
+    - name: Reorganize Files and Build APK
       run: |
+        echo "=== BẮT ĐẦU TỰ ĐỘNG SẮP XẾP LẠI THƯ MỤC ANDROID ==="
+        
+        # Nếu thư mục app chưa tồn tại, tự động tạo cấu trúc chuẩn
+        if [ ! -d "app/src/main" ]; then
+          mkdir -p app/src/main/java/com/shipper/tracker/data
+          mkdir -p app/src/main/java/com/shipper/tracker/service
+          mkdir -p app/src/main/java/com/shipper/tracker/ui
+          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+
+          # Chuyển code Kotlin vào đúng package
+          [ -f "DatabaseHelper.kt" ] && mv DatabaseHelper.kt app/src/main/java/com/shipper/tracker/data/
+          [ -f "GpsTrackingService.kt" ] && mv GpsTrackingService.kt app/src/main/java/com/shipper/tracker/service/
+          [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/shipper/tracker/ui/
+
+          # Chuyển file AndroidManifest
+          [ -f "AndroidManifest.xml" ] && mv AndroidManifest.xml app/src/main/
+
+          # Chuyển giao diện XML và cấu hình màu/chữ
+          [ -f "bg_card.xml" ] && mv bg_card.xml app/src/main/res/drawable/
+          [ -f "activity_main.xml" ] && mv activity_main.xml app/src/main/res/layout/
+          [ -f "item_daily_summary.xml" ] && mv item_daily_summary.xml app/src/main/res/layout/
+          [ -f "item_fuel.xml" ] && mv item_fuel.xml app/src/main/res/layout/
+          [ -f "colors.xml" ] && mv colors.xml app/src/main/res/values/
+          [ -f "strings.xml" ] && mv strings.xml app/src/main/res/values/
+          [ -f "themes.xml" ] && mv themes.xml app/src/main/res/values/
+
+          # Tách và đưa đúng file build.gradle.kts vào app
+          if [ -f "build.gradle (1).kts" ]; then
+            if grep -q "compileSdk" "build.gradle (1).kts"; then
+              mv "build.gradle (1).kts" app/build.gradle.kts
+            else
+              mv "build.gradle.kts" app/build.gradle.kts
+              mv "build.gradle (1).kts" build.gradle.kts
+            fi
+          fi
+          echo "Đã sắp xếp lại thư mục Android thành công!"
+        fi
+
+        # Tạo trình khởi chạy Gradle
         if [ ! -f gradlew ]; then
           gradle wrapper
         fi
         chmod +x gradlew
+
+        # Tiến hành build file APK
         ./gradlew assembleDebug --stacktrace
+
+        # Gom file APK ra thư mục sẵn sàng để tải
+        mkdir -p $GITHUB_WORKSPACE/apk_output
+        find . -name "*.apk" -exec cp {} $GITHUB_WORKSPACE/apk_output/ \;
 
     - name: Upload APK to Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ShipperTracker-App
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: apk_output/*.apk
