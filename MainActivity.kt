@@ -77,6 +77,24 @@ class MainActivity : AppCompatActivity() {
     private var baseTodayKm: Double = 0.0
     private var baseTodaySeconds: Long = 0L
 
+    // Bộ hẹn giờ cập nhật đồng hồ trực tiếp trên màn hình từng giây
+    private val uiTimerHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val uiTimerRunnable = object : Runnable {
+        override fun run() {
+            if (GpsTrackingService.isRunning && !GpsTrackingService.isPaused) {
+                GpsTrackingService.currentShiftSeconds++
+                val currentTodayKm = baseTodayKm + GpsTrackingService.currentShiftKm
+                val currentTodaySec = baseTodaySeconds + GpsTrackingService.currentShiftSeconds
+
+                tvTodayTotalKm.text = String.format(Locale.US, "%.2f", currentTodayKm)
+                tvTodayTotalDuration.text = formatSeconds(currentTodaySec)
+                tvShiftKm.text = String.format(Locale.US, "Ca: %.2f km", GpsTrackingService.currentShiftKm)
+                tvShiftTime.text = formatSeconds(GpsTrackingService.currentShiftSeconds)
+            }
+            uiTimerHandler.postDelayed(this, 1000)
+        }
+    }
+
     // Broadcast nhận dữ liệu thời gian thực 1 giây/lần từ GPS Service
     private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -121,6 +139,7 @@ class MainActivity : AppCompatActivity() {
         checkBatteryOptimization()
         refreshTodayCenterMetrics()
         syncServiceState()
+        uiTimerHandler.post(uiTimerRunnable)
     }
 
     override fun onResume() {
@@ -133,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         }
         refreshTodayCenterMetrics()
         syncServiceState()
+        uiTimerHandler.post(uiTimerRunnable)
     }
 
     override fun onPause() {
@@ -140,6 +160,7 @@ class MainActivity : AppCompatActivity() {
         try {
             unregisterReceiver(locationReceiver)
         } catch (e: Exception) {}
+        uiTimerHandler.removeCallbacks(uiTimerRunnable)
     }
 
     private fun initViews() {
@@ -265,7 +286,7 @@ class MainActivity : AppCompatActivity() {
     private fun startShiftInstantly() {
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val count = dbHelper.getTodayStats(todayStr).third
-activeShiftName = "Ca ${count + 1}"
+        activeShiftName = "Ca ${count + 1}"
         activeShiftStartTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
 
         // Đổi giao diện 1 chạm ngay tức thì

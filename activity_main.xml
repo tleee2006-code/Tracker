@@ -62,7 +62,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1.2"
-            android:text="LỊCH SỬ"
+            android:text="THEO NGÀY"
             android:textColor="@color/text_muted"
             android:textSize="13sp" />
 

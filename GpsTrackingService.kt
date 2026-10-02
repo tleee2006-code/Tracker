@@ -103,8 +103,11 @@ class GpsTrackingService : Service() {
         return START_STICKY
     }
 
+    private var isServiceStarted = false
+
     private fun startTracking() {
-        if (isRunning) return
+        if (isServiceStarted) return
+        isServiceStarted = true
 
         isRunning = true
         isPaused = false
