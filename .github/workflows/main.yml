@@ -26,9 +26,9 @@ jobs:
 
     - name: Reorganize Files and Build APK
       run: |
-        echo "=== BẮT ĐẦU TỰ ĐỘNG SẮP XẾP LẠI THƯ MỤC ANDROID ==="
+        echo "=== BẮT ĐẦU SẮP XẾP VÀ CẤU HÌNH DỰ ÁN ==="
         
-        # Nếu thư mục app chưa tồn tại, tự động tạo cấu trúc chuẩn
+        # 1. Tự động tái tạo cấu trúc thư mục chuẩn nếu các file bị bung ra ngoài root
         if [ ! -d "app/src/main" ]; then
           mkdir -p app/src/main/java/com/shipper/tracker/data
           mkdir -p app/src/main/java/com/shipper/tracker/service
@@ -37,15 +37,15 @@ jobs:
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
 
-          # Chuyển code Kotlin vào đúng package
+          # Chuyển code Kotlin
           [ -f "DatabaseHelper.kt" ] && mv DatabaseHelper.kt app/src/main/java/com/shipper/tracker/data/
           [ -f "GpsTrackingService.kt" ] && mv GpsTrackingService.kt app/src/main/java/com/shipper/tracker/service/
           [ -f "MainActivity.kt" ] && mv MainActivity.kt app/src/main/java/com/shipper/tracker/ui/
 
-          # Chuyển file AndroidManifest
+          # Chuyển Manifest
           [ -f "AndroidManifest.xml" ] && mv AndroidManifest.xml app/src/main/
 
-          # Chuyển giao diện XML và cấu hình màu/chữ
+          # Chuyển Layout & Resources
           [ -f "bg_card.xml" ] && mv bg_card.xml app/src/main/res/drawable/
           [ -f "activity_main.xml" ] && mv activity_main.xml app/src/main/res/layout/
           [ -f "item_daily_summary.xml" ] && mv item_daily_summary.xml app/src/main/res/layout/
@@ -54,7 +54,7 @@ jobs:
           [ -f "strings.xml" ] && mv strings.xml app/src/main/res/values/
           [ -f "themes.xml" ] && mv themes.xml app/src/main/res/values/
 
-          # Tách và đưa đúng file build.gradle.kts vào app
+          # Chuyển đúng file build.gradle.kts của app
           if [ -f "build.gradle (1).kts" ]; then
             if grep -q "compileSdk" "build.gradle (1).kts"; then
               mv "build.gradle (1).kts" app/build.gradle.kts
@@ -63,19 +63,23 @@ jobs:
               mv "build.gradle (1).kts" build.gradle.kts
             fi
           fi
-          echo "Đã sắp xếp lại thư mục Android thành công!"
         fi
 
-        # Tạo trình khởi chạy Gradle
+        # 2. BẬT ANDROIDX VÀ HỖ TRỢ ANDROID 15 (SỬA LỖI TRONG ẢNH)
+        echo "android.useAndroidX=true" > gradle.properties
+        echo "android.nonTransitiveRClass=true" >> gradle.properties
+        echo "android.suppressUnsupportedCompileSdk=35" >> gradle.properties
+
+        # 3. Tạo trình khởi chạy Gradle
         if [ ! -f gradlew ]; then
           gradle wrapper
         fi
         chmod +x gradlew
 
-        # Tiến hành build file APK
+        # 4. Tiến hành biên dịch APK
         ./gradlew assembleDebug --stacktrace
 
-        # Gom file APK ra thư mục sẵn sàng để tải
+        # 5. Gom file APK để sẵn sàng tải về
         mkdir -p $GITHUB_WORKSPACE/apk_output
         find . -name "*.apk" -exec cp {} $GITHUB_WORKSPACE/apk_output/ \;
 
