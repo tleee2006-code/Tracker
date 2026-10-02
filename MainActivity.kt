@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var btnStartShift: Button
     private lateinit var layoutRunningControls: LinearLayout
+    private lateinit var btnStandbyShift: Button
     private lateinit var btnPauseShift: Button
     private lateinit var btnStopShift: Button
     private lateinit var btnQuickRefill: Button
@@ -67,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listDailyHistory: ListView
     private lateinit var listFuelHistory: ListView
     private lateinit var btnClearAllHistory: Button
+    private lateinit var btnClearAllFuel: Button
 
     private lateinit var btnTabTracker: Button
     private lateinit var btnTabHistory: Button
@@ -103,15 +105,18 @@ class MainActivity : AppCompatActivity() {
                 val speed = intent.getFloatExtra(GpsTrackingService.EXTRA_SPEED_KMH, 0f)
                 val seconds = intent.getLongExtra(GpsTrackingService.EXTRA_DURATION_SEC, 0L)
                 val paused = intent.getBooleanExtra(GpsTrackingService.EXTRA_IS_PAUSED, false)
+                val standby = intent.getBooleanExtra(GpsTrackingService.EXTRA_IS_STANDBY, false)
 
-                // Cập nhật thẻ ca hiện tại
-                tvShiftKm.text = String.format(Locale.US, "Ca: %.2f km (%.0f km/h)", km, speed)
+                val speedStr = when {
+                    paused -> "Tạm dừng"
+                    standby -> "Đang chờ (Tắt GPS)"
+                    else -> String.format(Locale.US, "%.0f km/h", speed)
+                }
+                tvShiftKm.text = String.format(Locale.US, "Ca: %.2f km (%s)", km, speedStr)
                 tvShiftTime.text = formatSeconds(seconds)
 
-                // CẬP NHẬT TỔNG KM VÀ TỔNG THỜI GIAN HÔM NAY CHÍNH GIỮA (LŨY KẾ THEO GIÂY)
                 val currentTodayKm = baseTodayKm + km
                 val currentTodaySec = baseTodaySeconds + seconds
-
                 tvTodayTotalKm.text = String.format(Locale.US, "%.2f", currentTodayKm)
                 tvTodayTotalDuration.text = formatSeconds(currentTodaySec)
             }
@@ -139,7 +144,6 @@ class MainActivity : AppCompatActivity() {
         checkBatteryOptimization()
         refreshTodayCenterMetrics()
         syncServiceState()
-        uiTimerHandler.post(uiTimerRunnable)
     }
 
     override fun onResume() {
@@ -177,6 +181,7 @@ class MainActivity : AppCompatActivity() {
 
         btnStartShift = findViewById(R.id.btn_start_shift)
         layoutRunningControls = findViewById(R.id.layout_running_controls)
+        btnStandbyShift = findViewById(R.id.btn_standby_shift)
         btnPauseShift = findViewById(R.id.btn_pause_shift)
         btnStopShift = findViewById(R.id.btn_stop_shift)
         btnQuickRefill = findViewById(R.id.btn_quick_refill)
@@ -188,6 +193,7 @@ class MainActivity : AppCompatActivity() {
         listDailyHistory = findViewById(R.id.list_daily_history)
         listFuelHistory = findViewById(R.id.list_fuel_history)
         btnClearAllHistory = findViewById(R.id.btn_clear_all_history)
+        btnClearAllFuel = findViewById(R.id.btn_clear_all_fuel)
 
         btnTabTracker = findViewById(R.id.btn_tab_tracker)
         btnTabHistory = findViewById(R.id.btn_tab_history)
@@ -205,9 +211,14 @@ class MainActivity : AppCompatActivity() {
             loadFuelHistory()
         }
 
-        // BẮT ĐẦU CA: 1 CHẠM DUY NHẤT LÀ CHẠY NGAY (KHÔNG POPUP LẰNG NHẰNG)
+        // BẮT ĐẦU CA: 1 CHẠM DUY NHẤT LÀ CHẠY NGAY
         btnStartShift.setOnClickListener {
             startShiftInstantly()
+        }
+
+        // NÚT CHẾ ĐỘ CHỜ (VÀO QUÁN / CHỜ KHÁCH) - TẮT GPS 100%, ĐỒNG HỒ VẪN CHẠY
+        btnStandbyShift.setOnClickListener {
+            toggleStandbyInstantly()
         }
 
         // TẠM DỪNG / TIẾP TỤC: 1 CHẠM ĐỔI TRẠNG THÁI NGAY
@@ -215,7 +226,7 @@ class MainActivity : AppCompatActivity() {
             togglePauseInstantly()
         }
 
-        // KẾT THÚC CA: MỞ FORM DARK THEME ĐẸP MẮT (KHÔNG DÙNG POPUP TRẮNG)
+        // KẾT THÚC CA: MỞ FORM DARK THEME ĐẸP MẮT
         btnStopShift.setOnClickListener {
             showEndShiftDarkDialog()
         }
@@ -225,9 +236,14 @@ class MainActivity : AppCompatActivity() {
             showRefillDialog()
         }
 
-        // XÓA TOÀN BỘ DỮ LIỆU
+        // XÓA TẤT CẢ CA (HOÀN TOÀN ĐỘC LẬP, KHÔNG CHẠM VÀO XĂNG)
         btnClearAllHistory.setOnClickListener {
-            showClearAllConfirmDialog()
+            showClearAllShiftsConfirmDialog()
+        }
+
+        // XÓA TẤT CẢ LỊCH SỬ XĂNG (ĐỘC LẬP)
+        btnClearAllFuel.setOnClickListener {
+            showClearAllFuelConfirmDialog()
         }
     }
 
@@ -241,7 +257,6 @@ class MainActivity : AppCompatActivity() {
         btnTabFuel.setTextColor(ContextCompat.getColor(this, if (tab == 3) R.color.accent_blue else R.color.text_muted))
     }
 
-    // Cập nhật số KM và Thời gian hôm nay ở trung tâm màn hình
     private fun refreshTodayCenterMetrics() {
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val dateDisplay = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
@@ -259,7 +274,6 @@ class MainActivity : AppCompatActivity() {
         val totalOdo = dbHelper.getTotalOdometer()
         tvTotalOdometer.text = String.format(Locale.US, "Odo tổng: %.1f km", totalOdo)
 
-        // Cập nhật tên ca tiếp theo trên nút bắt đầu
         if (!GpsTrackingService.isRunning) {
             btnStartShift.text = "▶ BẮT ĐẦU CA MỚI (Ca ${completedCount + 1})"
         }
@@ -271,7 +285,16 @@ class MainActivity : AppCompatActivity() {
             layoutRunningControls.visibility = View.VISIBLE
             cardActiveShift.visibility = View.VISIBLE
 
-            tvActiveShiftTitle.text = if (GpsTrackingService.isPaused) "⏸ ĐÃ TẠM DỪNG: $activeShiftName" else "● ĐANG BẬT GPS: $activeShiftName"
+            if (GpsTrackingService.isStandby) {
+                btnStandbyShift.text = "🛵 TIẾP TỤC LĂN BÁNH (BẬT GPS)"
+                btnStandbyShift.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_green)
+                tvActiveShiftTitle.text = "☕ CHẾ ĐỘ CHỜ: $activeShiftName (ĐÃ TẮT GPS)"
+            } else {
+                btnStandbyShift.text = "☕ CHẾ ĐỘ CHỜ (VÀO QUÁN / TẮT GPS)"
+                btnStandbyShift.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_orange)
+                tvActiveShiftTitle.text = if (GpsTrackingService.isPaused) "⏸ ĐÃ TẠM DỪNG: $activeShiftName" else "● ĐANG BẬT GPS: $activeShiftName"
+            }
+
             btnPauseShift.text = if (GpsTrackingService.isPaused) "▶ TIẾP TỤC" else "⏸ TẠM DỪNG"
             tvShiftKm.text = String.format(Locale.US, "Ca: %.2f km", GpsTrackingService.currentShiftKm)
             tvShiftTime.text = formatSeconds(GpsTrackingService.currentShiftSeconds)
@@ -282,19 +305,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 1 CHẠM BẮT ĐẦU CA NGAY LẬP TỨC
+    // 1 CHẠM BẮT ĐẦU CA
     private fun startShiftInstantly() {
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val count = dbHelper.getTodayStats(todayStr).third
         activeShiftName = "Ca ${count + 1}"
         activeShiftStartTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
 
-        // Đổi giao diện 1 chạm ngay tức thì
         GpsTrackingService.isRunning = true
         GpsTrackingService.isPaused = false
+        GpsTrackingService.isStandby = false
         btnStartShift.visibility = View.GONE
         layoutRunningControls.visibility = View.VISIBLE
         cardActiveShift.visibility = View.VISIBLE
+
+        btnStandbyShift.text = "☕ CHẾ ĐỘ CHỜ (VÀO QUÁN / TẮT GPS)"
+        btnStandbyShift.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_orange)
         btnPauseShift.text = "⏸ TẠM DỪNG"
         tvActiveShiftTitle.text = "● ĐANG BẬT GPS: $activeShiftName"
         tvShiftKm.text = "Ca: 0.00 km"
@@ -311,7 +337,38 @@ class MainActivity : AppCompatActivity() {
             startService(serviceIntent)
         }
 
-        Toast.makeText(this, "Đã bật định vị ngầm 1s/lần cho $activeShiftName!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Đã bật định vị 1s/lần cho $activeShiftName!", Toast.LENGTH_SHORT).show()
+    }
+
+    // 1 CHẠM BẬT / TẮT CHẾ ĐỘ CHỜ (TẮT GPS, ĐỒNG HỒ VẪN CHẠY)
+    private fun toggleStandbyInstantly() {
+        if (!GpsTrackingService.isRunning) return
+
+        if (!GpsTrackingService.isStandby) {
+            // VÀO CHẾ ĐỘ CHỜ: TẮT GPS NGAY
+            GpsTrackingService.isStandby = true
+            btnStandbyShift.text = "🛵 TIẾP TỤC LĂN BÁNH (BẬT GPS)"
+            btnStandbyShift.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_green)
+            tvActiveShiftTitle.text = "☕ CHẾ ĐỘ CHỜ: $activeShiftName (ĐÃ TẮT GPS)"
+
+            val intent = Intent(this, GpsTrackingService::class.java).apply {
+                action = GpsTrackingService.ACTION_STANDBY
+            }
+            startService(intent)
+            Toast.makeText(this, "Đã tắt GPS! Đồng hồ ca vẫn tính thời gian bình thường.", Toast.LENGTH_SHORT).show()
+        } else {
+            // LĂN BÁNH LẠI: BẬT LẠI GPS 1S/LẦN
+            GpsTrackingService.isStandby = false
+            btnStandbyShift.text = "☕ CHẾ ĐỘ CHỜ (VÀO QUÁN / TẮT GPS)"
+            btnStandbyShift.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_orange)
+            tvActiveShiftTitle.text = "● ĐANG BẬT GPS: $activeShiftName"
+
+            val intent = Intent(this, GpsTrackingService::class.java).apply {
+                action = GpsTrackingService.ACTION_RESUME_STANDBY
+            }
+            startService(intent)
+            Toast.makeText(this, "Đã bật lại định vị GPS 1s/lần!", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // 1 CHẠM TẠM DỪNG / TIẾP TỤC
@@ -323,7 +380,7 @@ class MainActivity : AppCompatActivity() {
             }
             startService(intent)
             btnPauseShift.text = "⏸ TẠM DỪNG"
-            tvActiveShiftTitle.text = "● ĐANG BẬT GPS: $activeShiftName"
+            tvActiveShiftTitle.text = if (GpsTrackingService.isStandby) "☕ CHẾ ĐỘ CHỜ: $activeShiftName (ĐÃ TẮT GPS)" else "● ĐANG BẬT GPS: $activeShiftName"
         } else {
             GpsTrackingService.isPaused = true
             val intent = Intent(this, GpsTrackingService::class.java).apply {
@@ -335,7 +392,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // FORM KẾT THÚC CA DARK THEME (KHÔNG DÙNG POPUP TRẮNG)
+    // FORM KẾT THÚC CA DARK THEME
     private fun showEndShiftDarkDialog() {
         val distance = GpsTrackingService.currentShiftKm
         val durationSec = GpsTrackingService.currentShiftSeconds
@@ -375,20 +432,18 @@ class MainActivity : AppCompatActivity() {
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
             val endTimeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
 
-            // DỪNG SERVICE GPS NGAY
             val stopIntent = Intent(this, GpsTrackingService::class.java).apply {
                 action = GpsTrackingService.ACTION_STOP
             }
             startService(stopIntent)
 
-            // ĐỔI TRẠNG THÁI GIAO DIỆN NGAY
             GpsTrackingService.isRunning = false
             GpsTrackingService.isPaused = false
+            GpsTrackingService.isStandby = false
             btnStartShift.visibility = View.VISIBLE
             layoutRunningControls.visibility = View.GONE
             cardActiveShift.visibility = View.GONE
 
-            // LƯU CƠ SỞ DỮ LIỆU
             val shift = Shift(
                 date = todayStr,
                 shiftName = activeShiftName,
@@ -449,23 +504,36 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // Xóa tất cả dữ liệu
-    private fun showClearAllConfirmDialog() {
+    // XÓA TẤT CẢ CA CHẠY (KHÔNG ẢNH HƯỞNG ĐẾN XĂNG)
+    private fun showClearAllShiftsConfirmDialog() {
         AlertDialog.Builder(this)
-            .setTitle("⚠️ Xác nhận xóa sạch")
-            .setMessage("Bạn có chắc chắn muốn xóa toàn bộ lịch sử ca chạy và số liệu đổ xăng? Odometer sẽ trở về 0.0 km.")
-            .setPositiveButton("XÓA TẤT CẢ") { _, _ ->
-                dbHelper.clearAllData()
+            .setTitle("⚠️ Xóa toàn bộ ca chạy?")
+            .setMessage("Chỉ xóa lịch sử các ca chạy. Lịch sử đổ xăng vẫn được giữ nguyên độc lập.")
+            .setPositiveButton("XÓA TẤT CẢ CA") { _, _ ->
+                dbHelper.clearAllShifts()
                 refreshTodayCenterMetrics()
                 loadDailyHistory()
-                loadFuelHistory()
-                Toast.makeText(this, "Đã xóa toàn bộ dữ liệu!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Đã xóa toàn bộ ca chạy!", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Hủy", null)
             .show()
     }
 
-    // Tải danh sách theo Ngày dạng DÒNG CHẢY TRỰC TIẾP TRONG APP (KHÔNG POPUP)
+    // XÓA TẤT CẢ LỊCH SỬ XĂNG (KHÔNG ẢNH HƯỞNG ĐẾN CA CHẠY)
+    private fun showClearAllFuelConfirmDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("⚠️ Xóa toàn bộ lịch sử xăng?")
+            .setMessage("Chỉ xóa số liệu các lần đổ xăng. Lịch sử các ca chạy và số km vẫn giữ nguyên.")
+            .setPositiveButton("XÓA HẾT XĂNG") { _, _ ->
+                dbHelper.clearAllFuel()
+                loadFuelHistory()
+                Toast.makeText(this, "Đã xóa sạch lịch sử xăng!", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    // Tải danh sách theo Ngày dạng DÒNG CHẢY TRỰC TIẾP TRONG APP (CÓ THU NHẬP / GIỜ CẢ NGÀY)
     private fun loadDailyHistory() {
         val list = dbHelper.getDailySummaries()
         val adapter = object : ArrayAdapter<DailySummary>(this, 0, list) {
@@ -480,6 +548,7 @@ class MainActivity : AppCompatActivity() {
                 val tvTotalDuration = view.findViewById<TextView>(R.id.item_total_duration)
                 val tvTotalRev = view.findViewById<TextView>(R.id.item_total_rev)
                 val tvTotalProfit = view.findViewById<TextView>(R.id.item_total_profit)
+                val tvEarningsPerHour = view.findViewById<TextView>(R.id.item_earnings_per_hour)
                 val btnDeleteDay = view.findViewById<Button>(R.id.btn_delete_day)
                 val tvExpandHint = view.findViewById<TextView>(R.id.tv_expand_hint)
                 val shiftsContainer = view.findViewById<LinearLayout>(R.id.shifts_container)
@@ -500,11 +569,14 @@ class MainActivity : AppCompatActivity() {
                     tvTotalProfit.setTextColor(ContextCompat.getColor(context, R.color.accent_red))
                 }
 
-                // XÓA RIÊNG TOÀN BỘ CÁC CA CỦA NGÀY NÀY
+                // THU NHẬP / GIỜ TÍNH THEO CẢ NGÀY
+                tvEarningsPerHour.text = String.format(Locale.US, "%,d đ/h", item.earningsPerHour)
+
+                // XÓA RIÊNG CÁC CA CỦA NGÀY NÀY (KHÔNG ẢNH HƯỞNG ĐẾN XĂNG)
                 btnDeleteDay.setOnClickListener {
                     AlertDialog.Builder(context)
                         .setTitle("Xóa ngày ${item.date}?")
-                        .setMessage("Bạn có chắc muốn xóa tất cả ${item.shiftCount} ca của ngày này?")
+                        .setMessage("Bạn có chắc muốn xóa tất cả ${item.shiftCount} ca của ngày này? (Số liệu xăng vẫn an toàn).")
                         .setPositiveButton("Xóa") { _, _ ->
                             dbHelper.deleteShiftsByDate(item.date)
                             refreshTodayCenterMetrics()
@@ -515,7 +587,7 @@ class MainActivity : AppCompatActivity() {
                         .show()
                 }
 
-                // CHẠM ĐỂ MỞ RỘNG DÒNG CHẢY TỪNG CA TRỰC TIẾP TRONG APP (KHÔNG DÙNG POPUP TRẮNG)
+                // CHẠM ĐỂ MỞ RỘNG DÒNG CHẢY TỪNG CA
                 view.setOnClickListener {
                     if (shiftsContainer.visibility == View.VISIBLE) {
                         shiftsContainer.visibility = View.GONE
@@ -540,7 +612,7 @@ class MainActivity : AppCompatActivity() {
                                 tvShiftProfit.setTextColor(ContextCompat.getColor(context, R.color.accent_red))
                             }
 
-                            // Nút xóa riêng từng ca lẻ
+                            // XÓA RIÊNG TỪNG CA LẺ (KHÔNG ẢNH HƯỞNG ĐẾN XĂNG)
                             shiftView.findViewById<ImageButton>(R.id.btn_delete_shift).setOnClickListener {
                                 dbHelper.deleteShiftById(shift.id)
                                 refreshTodayCenterMetrics()
@@ -561,7 +633,7 @@ class MainActivity : AppCompatActivity() {
         listDailyHistory.adapter = adapter
     }
 
-    // Tải lịch sử đổ xăng
+    // Tải lịch sử đổ xăng (ĐỘC LẬP HOÀN TOÀN, CÓ NÚT XÓA RIÊNG TỪNG LẦN)
     private fun loadFuelHistory() {
         val list = dbHelper.getAllFuelLogs()
         val adapter = object : ArrayAdapter<FuelRefill>(this, 0, list) {
@@ -574,6 +646,20 @@ class MainActivity : AppCompatActivity() {
                 view.findViewById<TextView>(R.id.fuel_amount).text = String.format(Locale.US, "%,d đ", item.amountPaid)
                 view.findViewById<TextView>(R.id.fuel_stats_km).text = String.format(Locale.US, "Chạy được: %.1f km (%.2f L)", item.kmSinceLast, item.liters)
                 view.findViewById<TextView>(R.id.fuel_cost_km).text = String.format(Locale.US, "~ %,.0f đ/km", item.costPerKm)
+
+                // NÚT XÓA RIÊNG TỪNG LẦN ĐỔ XĂNG
+                view.findViewById<ImageButton>(R.id.btn_delete_fuel).setOnClickListener {
+                    AlertDialog.Builder(context)
+                        .setTitle("Xóa lần đổ xăng này?")
+                        .setMessage("Số tiền: ${String.format(Locale.US, "%,d đ", item.amountPaid)} vào lúc ${item.date} ${item.time}")
+                        .setPositiveButton("Xóa") { _, _ ->
+                            dbHelper.deleteFuelById(item.id)
+                            loadFuelHistory()
+                            Toast.makeText(context, "Đã xóa lần đổ xăng này!", Toast.LENGTH_SHORT).show()
+                        }
+                        .setNegativeButton("Hủy", null)
+                        .show()
+                }
 
                 return view
             }

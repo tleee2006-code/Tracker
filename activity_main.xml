@@ -62,7 +62,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1.2"
-            android:text="THEO NGÀY"
+            android:text="LỊCH SỬ"
             android:textColor="@color/text_muted"
             android:textSize="13sp" />
 
@@ -252,36 +252,55 @@
                     android:textStyle="bold"
                     android:backgroundTint="@color/accent_green" />
 
-                <!-- Running Controls (Khi đang chạy - 1 CHẠM ĂN NGAY) -->
+                <!-- Running Controls (Khi đang chạy - CÓ NÚT CHẾ ĐỘ CHỜ TẮT GPS) -->
                 <LinearLayout
                     android:id="@+id/layout_running_controls"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
+                    android:orientation="vertical"
                     android:layout_marginTop="16dp"
                     android:visibility="gone">
 
+                    <!-- Hàng 1: Nút Chế độ chờ (Vào quán / Chờ khách - Tắt GPS, Đồng hồ vẫn chạy) -->
                     <Button
-                        android:id="@+id/btn_pause_shift"
-                        android:layout_width="0dp"
-                        android:layout_height="64dp"
-                        android:layout_weight="1"
-                        android:layout_marginEnd="8dp"
-                        android:text="⏸ TẠM DỪNG"
-                        android:textSize="15sp"
+                        android:id="@+id/btn_standby_shift"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:text="☕ CHẾ ĐỘ CHỜ (VÀO QUÁN / TẮT GPS)"
+                        android:textSize="14sp"
                         android:textStyle="bold"
-                        android:backgroundTint="@color/card_border"
-                        android:textColor="@color/text_main" />
+                        android:backgroundTint="@color/accent_orange"
+                        android:textColor="@color/bg_dark" />
 
-                    <Button
-                        android:id="@+id/btn_stop_shift"
-                        android:layout_width="0dp"
-                        android:layout_height="64dp"
-                        android:layout_weight="1.2"
-                        android:text="⏹ KẾT THÚC CA"
-                        android:textSize="15sp"
-                        android:textStyle="bold"
-                        android:backgroundTint="@color/accent_red" />
+                    <!-- Hàng 2: Tạm dừng và Kết thúc ca -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp">
+
+                        <Button
+                            android:id="@+id/btn_pause_shift"
+                            android:layout_width="0dp"
+                            android:layout_height="60dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="8dp"
+                            android:text="⏸ TẠM DỪNG"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="@color/card_border"
+                            android:textColor="@color/text_main" />
+
+                        <Button
+                            android:id="@+id/btn_stop_shift"
+                            android:layout_width="0dp"
+                            android:layout_height="60dp"
+                            android:layout_weight="1.2"
+                            android:text="⏹ KẾT THÚC CA"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="@color/accent_red" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <!-- Quick Refill Button -->
@@ -298,7 +317,7 @@
             </LinearLayout>
         </ScrollView>
 
-        <!-- TAB 2: LỊCH SỬ THEO NGÀY (DÒNG CHẢY TRONG APP, KHÔNG POPUP TRẮNG) -->
+        <!-- TAB 2: LỊCH SỬ (DÒNG CHẢY TRONG APP, KHÔNG POPUP TRẮNG) -->
         <LinearLayout
             android:id="@+id/view_history"
             android:layout_width="match_parent"
@@ -328,7 +347,7 @@
                     style="@style/Widget.MaterialComponents.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:text="🗑️ Xóa tất cả"
+                    android:text="🗑️ Xóa tất cả ca"
                     android:textColor="@color/accent_red"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -342,7 +361,7 @@
                 android:dividerHeight="0dp" />
         </LinearLayout>
 
-        <!-- TAB 3: LỊCH SỬ ĐỔ XĂNG -->
+        <!-- TAB 3: LỊCH SỬ ĐỔ XĂNG (ĐỘC LẬP HOÀN TOÀN, CÓ NÚT XÓA) -->
         <LinearLayout
             android:id="@+id/view_fuel"
             android:layout_width="match_parent"
@@ -351,13 +370,31 @@
             android:padding="16dp"
             android:visibility="gone">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Lịch sử các lần đổ xăng và Chi phí/km"
-                android:textColor="@color/text_muted"
-                android:textSize="13sp"
-                android:layout_marginBottom="12dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Lịch sử đổ xăng (Độc lập)"
+                    android:textColor="@color/text_muted"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_clear_all_fuel"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="🗑️ Xóa tất cả xăng"
+                    android:textColor="@color/accent_red"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
             <ListView
                 android:id="@+id/list_fuel_history"

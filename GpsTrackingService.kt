@@ -31,6 +31,8 @@ class GpsTrackingService : Service() {
         const val ACTION_START = "ACTION_START"
         const val ACTION_PAUSE = "ACTION_PAUSE"
         const val ACTION_RESUME = "ACTION_RESUME"
+        const val ACTION_STANDBY = "ACTION_STANDBY"
+        const val ACTION_RESUME_STANDBY = "ACTION_RESUME_STANDBY"
         const val ACTION_STOP = "ACTION_STOP"
 
         const val EXTRA_SHIFT_NAME = "EXTRA_SHIFT_NAME"
@@ -40,9 +42,11 @@ class GpsTrackingService : Service() {
         const val EXTRA_SPEED_KMH = "EXTRA_SPEED_KMH"
         const val EXTRA_DURATION_SEC = "EXTRA_DURATION_SEC"
         const val EXTRA_IS_PAUSED = "EXTRA_IS_PAUSED"
+        const val EXTRA_IS_STANDBY = "EXTRA_IS_STANDBY"
 
         var isRunning = false
         var isPaused = false
+        var isStandby = false
         var currentShiftKm = 0.0
         var currentShiftSeconds = 0L
     }
@@ -54,10 +58,7 @@ class GpsTrackingService : Service() {
     private var lastLocation: Location? = null
     private var shiftName: String = "Ca Chạy"
     private var timerThread: Thread? = null
-
-    // Biến máy trạng thái: ĐANG CHẠY (true) hay ĐANG DỪNG (false)
-    private var isVehicleMoving = false
-    private var stationaryCount = 0
+    private var isServiceStarted = false
 
     override fun onCreate() {
         super.onCreate()
@@ -66,7 +67,7 @@ class GpsTrackingService : Service() {
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                if (isPaused) return
+                if (isPaused || isStandby) return
                 for (location in result.locations) {
                     processNewLocation(location)
                 }
@@ -85,13 +86,28 @@ class GpsTrackingService : Service() {
             ACTION_PAUSE -> {
                 isPaused = true
                 lastLocation = null
-                isVehicleMoving = false
                 updateNotification("⏸ Đang tạm dừng ca...")
                 broadcastUpdate(0f)
             }
             ACTION_RESUME -> {
                 isPaused = false
                 lastLocation = null
+                updateNotification("● Đang tiếp tục theo dõi 1s/lần...")
+                broadcastUpdate(0f)
+            }
+            ACTION_STANDBY -> {
+                // CHẾ ĐỘ CHỜ (VÀO QUÁN / CHỜ KHÁCH): TẮT GPS 100%, ĐỒNG HỒ VẪN CHẠY
+                isStandby = true
+                lastLocation = null
+                fusedLocationClient.removeLocationUpdates(locationCallback)
+                updateNotification("☕ Đang chế độ chờ (Đã tắt GPS, đồng hồ vẫn chạy)")
+                broadcastUpdate(0f)
+            }
+            ACTION_RESUME_STANDBY -> {
+                // TIẾP TỤC LĂN BÁNH: BẬT LẠI GPS 1S/LẦN
+                isStandby = false
+                lastLocation = null
+                requestGpsUpdates()
                 updateNotification("● Đang tiếp tục theo dõi 1s/lần...")
                 broadcastUpdate(0f)
             }
@@ -103,27 +119,22 @@ class GpsTrackingService : Service() {
         return START_STICKY
     }
 
-    private var isServiceStarted = false
-
     private fun startTracking() {
         if (isServiceStarted) return
         isServiceStarted = true
 
         isRunning = true
         isPaused = false
+        isStandby = false
         currentShiftKm = 0.0
         currentShiftSeconds = 0L
         lastLocation = null
-        isVehicleMoving = false
-        stationaryCount = 0
 
-        // 1. WakeLock giữ CPU
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ShipperTracker:GpsWakeLock").apply {
             acquire(12 * 60 * 60 * 1000L)
         }
 
-        // 2. Foreground Service chuẩn Android 14/15
         val notification = buildNotification("Bắt đầu ca: 0.00 km")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
@@ -131,24 +142,9 @@ class GpsTrackingService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        // 3. Quét liên tục 1 giây/lần
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
-            .setMinUpdateIntervalMillis(1000L)
-            .setMinUpdateDistanceMeters(0f)
-            .build()
+        requestGpsUpdates()
 
-        try {
-            fusedLocationClient.requestLocationUpdates(
-                locationRequest,
-                locationCallback,
-                Looper.getMainLooper()
-            )
-        } catch (e: SecurityException) {
-            stopSelf()
-            return
-        }
-
-        // 4. Timer thời gian ca
+        // Timer thời gian ca chạy ngầm (chạy liên tục kể cả khi standby)
         timerThread = Thread {
             while (isRunning) {
                 try {
@@ -165,9 +161,25 @@ class GpsTrackingService : Service() {
         timerThread?.start()
     }
 
-    // THUẬT TOÁN MÁY TRẠNG THÁI (STATE MACHINE): ĐÈN ĐỎ DỪNG VS XE CHẠY
+    private fun requestGpsUpdates() {
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
+            .setMinUpdateIntervalMillis(1000L)
+            .setMinUpdateDistanceMeters(0f)
+            .build()
+
+        try {
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+        } catch (e: SecurityException) {
+            stopSelf()
+        }
+    }
+
+    // THUẬT TOÁN TÍNH QUÃNG ĐƯỜNG: TỰ ĐỘNG KHÓA ĐÈN ĐỎ & ĐẾM CHUẨN 1S/LẦN
     private fun processNewLocation(newLoc: Location) {
-        // Lọc 1: Bỏ qua điểm nếu sai số vệ tinh quá tệ (> 35m)
         if (newLoc.hasAccuracy() && newLoc.accuracy > 35f) {
             return
         }
@@ -186,30 +198,19 @@ class GpsTrackingService : Service() {
         val speedMs = distanceMeters / timeDeltaSec
         val speedKmh = (speedMs * 3.6).toFloat()
 
-        // Lọc 2: Bỏ qua bước nhảy vọt phi thực tế (> 110 km/h)
         if (speedKmh > 110f) {
             lastLocation = newLoc
             return
         }
 
-        // Lọc 3: Máy trạng thái 2 tầng: Dừng xe vs Đang di chuyển
+        // TỰ ĐỘNG KHÓA KHI CHỜ ĐÈN ĐỎ (Vận tốc < 2.5 km/h và cự ly < 2.5m)
         val instantSpeed = if (newLoc.hasSpeed()) (newLoc.speed * 3.6f) else speedKmh
-
         if (instantSpeed < 2.5f && distanceMeters < 2.5f) {
-            // Xe đang đứng yên (dừng đèn đỏ, tắc cứng, chờ đơn)
-            stationaryCount++
-            if (stationaryCount >= 2) {
-                isVehicleMoving = false
-            }
-            // Khóa cứng bộ đếm, không cộng rung lắc GPS
+            // Xe đang dừng đèn đỏ -> KHÓA CỨNG, KHÔNG CỘNG NHẢY ẢO
             return
-        } else {
-            // Xe bắt đầu chuyển bánh
-            stationaryCount = 0
-            isVehicleMoving = true
         }
 
-        // Đang di chuyển hợp lệ -> Cộng dồn khoảng cách
+        // Xe đang lăn bánh ngoài đường -> Cộng dồn ngay
         val deltaKm = distanceMeters / 1000.0
         currentShiftKm += deltaKm
         lastLocation = newLoc
@@ -225,6 +226,7 @@ class GpsTrackingService : Service() {
             putExtra(EXTRA_SPEED_KMH, speedKmh)
             putExtra(EXTRA_DURATION_SEC, currentShiftSeconds)
             putExtra(EXTRA_IS_PAUSED, isPaused)
+            putExtra(EXTRA_IS_STANDBY, isStandby)
             setPackage(packageName)
         }
         sendBroadcast(intent)
@@ -233,6 +235,8 @@ class GpsTrackingService : Service() {
     private fun stopTracking() {
         isRunning = false
         isPaused = false
+        isStandby = false
+        isServiceStarted = false
 
         fusedLocationClient.removeLocationUpdates(locationCallback)
 

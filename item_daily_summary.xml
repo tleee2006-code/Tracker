@@ -44,7 +44,7 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- Stats Grid: Km, Time, Revenue, Profit -->
+    <!-- Stats Grid: Km, Time -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -94,6 +94,7 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Stats Grid: Revenue, Profit -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -143,6 +144,34 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- THU NHẬP / GIỜ TÍNH THEO CẢ NGÀY (RẤT NỔI BẬT) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="10dp"
+        android:background="#12171F"
+        android:padding="10dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="⚡ Thu nhập trung bình / giờ (cả ngày):"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/item_earnings_per_hour"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="-- đ/h"
+            android:textColor="@color/accent_orange"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
     <!-- Expand hint -->
     <TextView
         android:id="@+id/tv_expand_hint"
@@ -153,7 +182,7 @@
         android:textColor="@color/accent_blue"
         android:textSize="11sp" />
 
-    <!-- Container bung các ca chi tiết trực tiếp trong app (Dark theme, không dùng popup trắng) -->
+    <!-- Container bung các ca chi tiết trực tiếp trong app -->
     <LinearLayout
         android:id="@+id/shifts_container"
         android:layout_width="match_parent"

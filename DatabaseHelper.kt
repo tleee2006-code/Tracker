@@ -11,7 +11,7 @@ import java.util.Locale
 data class Shift(
     val id: Long = 0,
     val date: String,             // yyyy-MM-dd
-    val shiftName: String,        // "Ca 1 (Sáng)"
+    val shiftName: String,        // "Ca 1"
     val startTime: String,        // "07:30:15"
     val endTime: String,          // "11:45:20"
     val durationSeconds: Long,    // Thời lượng chạy tính đến từng giây
@@ -29,7 +29,8 @@ data class DailySummary(
     val totalDurationSeconds: Long,
     val totalRevenue: Long,
     val totalFuelCost: Long,
-    val totalProfit: Long
+    val totalProfit: Long,
+    val earningsPerHour: Long     // Thu nhập / giờ tính theo cả ngày
 )
 
 data class FuelRefill(
@@ -48,7 +49,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         const val DATABASE_NAME = "shipper_tracker.db"
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 4
 
         const val TABLE_SHIFTS = "shifts"
         const val TABLE_FUEL = "fuel_refills"
@@ -182,15 +183,25 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
         val cursor = db.rawQuery(query, null)
         while (cursor.moveToNext()) {
+            val dist = cursor.getDouble(2)
+            val dur = cursor.getLong(3)
+            val rev = cursor.getLong(4)
+            val fuel = cursor.getLong(5)
+            val profit = cursor.getLong(6)
+
+            // Tính thu nhập / giờ theo cả ngày (VNĐ/h)
+            val earnPerHour = if (dur > 0) ((profit.toDouble() / dur) * 3600).toLong() else 0L
+
             list.add(
                 DailySummary(
                     date = cursor.getString(0),
                     shiftCount = cursor.getInt(1),
-                    totalDistanceKm = cursor.getDouble(2),
-                    totalDurationSeconds = cursor.getLong(3),
-                    totalRevenue = cursor.getLong(4),
-                    totalFuelCost = cursor.getLong(5),
-                    totalProfit = cursor.getLong(6)
+                    totalDistanceKm = dist,
+                    totalDurationSeconds = dur,
+                    totalRevenue = rev,
+                    totalFuelCost = fuel,
+                    totalProfit = profit,
+                    earningsPerHour = earnPerHour
                 )
             )
         }
@@ -227,6 +238,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return list
     }
 
+    // --- XÓA CA CHẠY (HOÀN TOÀN ĐỘC LẬP, KHÔNG CHẠM VÀO XĂNG) ---
     fun deleteShiftsByDate(dateStr: String) {
         val db = writableDatabase
         db.delete(TABLE_SHIFTS, "date = ?", arrayOf(dateStr))
@@ -239,13 +251,10 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         recalculateOdometer()
     }
 
-    fun clearAllData() {
+    fun clearAllShifts() {
         val db = writableDatabase
         db.delete(TABLE_SHIFTS, null, null)
-        db.delete(TABLE_FUEL, null, null)
-        setTotalOdometer(0.0)
-        val cv = ContentValues().apply { put("value", "0.0") }
-        db.update(TABLE_STATE, cv, "key = 'last_refill_km'", null)
+        recalculateOdometer()
     }
 
     private fun recalculateOdometer() {
@@ -259,6 +268,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         setTotalOdometer(total)
     }
 
+    // --- PHẦN XĂNG (ĐỘC LẬP HOÀN TOÀN, CÓ XÓA TỪNG LẦN HOẶC XÓA HẾT) ---
     fun recordFuelRefill(amount: Long, price: Long): FuelRefill {
         val db = writableDatabase
         val currentOdo = getTotalOdometer()
@@ -309,7 +319,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     fun getAllFuelLogs(): List<FuelRefill> {
         val list = mutableListOf<FuelRefill>()
         val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM $TABLE_FUEL ORDER BY id DESC LIMIT 30", null)
+        val cursor = db.rawQuery("SELECT * FROM $TABLE_FUEL ORDER BY id DESC LIMIT 50", null)
         while (cursor.moveToNext()) {
             list.add(
                 FuelRefill(
@@ -327,5 +337,17 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         }
         cursor.close()
         return list
+    }
+
+    fun deleteFuelById(id: Long) {
+        val db = writableDatabase
+        db.delete(TABLE_FUEL, "id = ?", arrayOf(id.toString()))
+    }
+
+    fun clearAllFuel() {
+        val db = writableDatabase
+        db.delete(TABLE_FUEL, null, null)
+        val cv = ContentValues().apply { put("value", "0.0") }
+        db.update(TABLE_STATE, cv, "key = 'last_refill_km'", null)
     }
 }
