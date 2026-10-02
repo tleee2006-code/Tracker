@@ -26,9 +26,8 @@ jobs:
 
     - name: Reorganize Files and Build APK
       run: |
-        echo "=== BẮT ĐẦU SẮP XẾP VÀ CẤU HÌNH DỰ ÁN ==="
+        echo "=== BẮT ĐẦU SẮP XẾP VÀ CẤU HÌNH DỰ ÁN V3 ==="
         
-        # 1. Tự động tái tạo cấu trúc thư mục chuẩn nếu các file bị bung ra ngoài root
         if [ ! -d "app/src/main" ]; then
           mkdir -p app/src/main/java/com/shipper/tracker/data
           mkdir -p app/src/main/java/com/shipper/tracker/service
@@ -45,16 +44,21 @@ jobs:
           # Chuyển Manifest
           [ -f "AndroidManifest.xml" ] && mv AndroidManifest.xml app/src/main/
 
-          # Chuyển Layout & Resources
+          # Chuyển Layouts & Drawables mới
           [ -f "bg_card.xml" ] && mv bg_card.xml app/src/main/res/drawable/
+          [ -f "bg_input.xml" ] && mv bg_input.xml app/src/main/res/drawable/
           [ -f "activity_main.xml" ] && mv activity_main.xml app/src/main/res/layout/
           [ -f "item_daily_summary.xml" ] && mv item_daily_summary.xml app/src/main/res/layout/
+          [ -f "item_shift_detail.xml" ] && mv item_shift_detail.xml app/src/main/res/layout/
+          [ -f "dialog_end_shift.xml" ] && mv dialog_end_shift.xml app/src/main/res/layout/
           [ -f "item_fuel.xml" ] && mv item_fuel.xml app/src/main/res/layout/
+
+          # Chuyển Values
           [ -f "colors.xml" ] && mv colors.xml app/src/main/res/values/
           [ -f "strings.xml" ] && mv strings.xml app/src/main/res/values/
           [ -f "themes.xml" ] && mv themes.xml app/src/main/res/values/
 
-          # Chuyển đúng file build.gradle.kts của app
+          # Chuyển Gradle build
           if [ -f "build.gradle (1).kts" ]; then
             if grep -q "compileSdk" "build.gradle (1).kts"; then
               mv "build.gradle (1).kts" app/build.gradle.kts
@@ -65,30 +69,23 @@ jobs:
           fi
         fi
 
-        # 2. SỬA LỖI CRASH DATABASE (VÔ HIỆU HÓA LỆNH GÂY VĂNG APP TRONG ONCREATE)
-        find . -name "DatabaseHelper.kt" -exec sed -i 's/db.enableWriteAheadLogging()/\/\/ db.enableWriteAheadLogging()/g' {} +
-
-        # 3. BỔ SUNG QUYỀN PIN VÀO MANIFEST
-        find . -name "AndroidManifest.xml" -exec sed -i '/ACCESS_COARSE_LOCATION/a \    ' {} +
-
-        # 4. BẬT ANDROIDX VÀ HỖ TRỢ ANDROID 15
+        # Cấu hình AndroidX và Android 15
         echo "android.useAndroidX=true" > gradle.properties
         echo "android.nonTransitiveRClass=true" >> gradle.properties
         echo "android.suppressUnsupportedCompileSdk=35" >> gradle.properties
 
-        # 5. SỬA LỖI KÝ TỰ & TRONG FILE XML
+        # Sửa lỗi ký tự & trong XML
         find . -name "*.xml" -exec sed -i 's/ & / và /g' {} +
 
-        # 6. Tạo trình khởi chạy Gradle
+        # Tạo gradlew
         if [ ! -f gradlew ]; then
           gradle wrapper
         fi
         chmod +x gradlew
 
-        # 7. Tiến hành biên dịch APK
+        # Build APK
         ./gradlew assembleDebug --stacktrace
 
-        # 8. Gom file APK để tải về
         mkdir -p $GITHUB_WORKSPACE/apk_output
         find . -name "*.apk" -exec cp {} $GITHUB_WORKSPACE/apk_output/ \;
 
