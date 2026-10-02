@@ -4,8 +4,10 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/bg_card"
-    android:padding="16dp">
+    android:padding="16dp"
+    android:layout_marginBottom="12dp">
 
+    <!-- Day Header -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -19,7 +21,7 @@
             android:layout_weight="1"
             android:text="2026-10-02"
             android:textColor="@color/text_main"
-            android:textSize="15sp"
+            android:textSize="16sp"
             android:textStyle="bold" />
 
         <TextView
@@ -29,9 +31,20 @@
             android:text="3 ca chạy"
             android:textColor="@color/accent_blue"
             android:textSize="12sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:layout_marginEnd="10dp" />
+
+        <Button
+            android:id="@+id/btn_delete_day"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="🗑️ Xóa ngày"
+            android:textColor="@color/accent_red"
+            android:textSize="11sp" />
     </LinearLayout>
 
+    <!-- Stats Grid: Km, Time, Revenue, Profit -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -46,18 +59,46 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Tổng km"
+                android:text="Tổng KM ngày"
                 android:textColor="@color/text_muted"
                 android:textSize="11sp" />
             <TextView
                 android:id="@+id/item_total_km"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="75.5 km"
+                android:text="75.50 km"
                 android:textColor="@color/text_main"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.2"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tổng giờ hoạt động"
+                android:textColor="@color/text_muted"
+                android:textSize="11sp" />
+            <TextView
+                android:id="@+id/item_total_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="05:32:15"
+                android:textColor="@color/accent_orange"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -83,7 +124,7 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_weight="1.2"
             android:orientation="vertical">
             <TextView
                 android:layout_width="wrap_content"
@@ -102,11 +143,22 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Expand hint -->
     <TextView
+        android:id="@+id/tv_expand_hint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="👉 Chạm để xem hoặc xóa từng ca trong ngày"
-        android:textColor="@color/text_muted"
+        android:layout_marginTop="10dp"
+        android:text="▼ Chạm để mở rộng dòng chảy từng ca trong ngày"
+        android:textColor="@color/accent_blue"
         android:textSize="11sp" />
+
+    <!-- Container bung các ca chi tiết trực tiếp trong app (Dark theme, không dùng popup trắng) -->
+    <LinearLayout
+        android:id="@+id/shifts_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:layout_marginTop="8dp" />
 </LinearLayout>

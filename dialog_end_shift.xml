@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_card"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/dialog_end_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="⏹ KẾT THÚC CA LÀM VIỆC"
+        android:textColor="@color/text_main"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp"
+        android:background="#12171F"
+        android:padding="12dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Quãng đường ca"
+                android:textColor="@color/text_muted"
+                android:textSize="11sp" />
+            <TextView
+                android:id="@+id/dialog_shift_km"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0.00 km"
+                android:textColor="@color/accent_blue"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:background="@color/card_border" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Thời gian chạy"
+                android:textColor="@color/text_muted"
+                android:textSize="11sp" />
+            <TextView
+                android:id="@+id/dialog_shift_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00:00"
+                android:textColor="@color/text_main"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tổng doanh thu nhận từ App ship (VNĐ):"
+        android:textColor="@color/text_muted"
+        android:textSize="12sp"
+        android:layout_marginTop="16dp" />
+    <EditText
+        android:id="@+id/et_revenue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number"
+        android:hint="Ví dụ: 350000"
+        android:textColor="@color/text_main"
+        android:textColorHint="@color/text_muted"
+        android:background="@drawable/bg_input"
+        android:padding="12dp"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tiền xăng tính cho ca (VNĐ):"
+        android:textColor="@color/text_muted"
+        android:textSize="12sp"
+        android:layout_marginTop="10dp" />
+    <EditText
+        android:id="@+id/et_fuel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number"
+        android:hint="Ví dụ: 50000"
+        android:textColor="@color/text_main"
+        android:textColorHint="@color/text_muted"
+        android:background="@drawable/bg_input"
+        android:padding="12dp"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Chi phí khác (Nước, gửi xe) (VNĐ):"
+        android:textColor="@color/text_muted"
+        android:textSize="12sp"
+        android:layout_marginTop="10dp" />
+    <EditText
+        android:id="@+id/et_other"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number"
+        android:text="0"
+        android:textColor="@color/text_main"
+        android:textColorHint="@color/text_muted"
+        android:background="@drawable/bg_input"
+        android:padding="12dp"
+        android:layout_marginTop="4dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="20dp">
+
+        <Button
+            android:id="@+id/btn_dialog_cancel"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:text="Hủy"
+            android:textColor="@color/text_muted" />
+
+        <Button
+            android:id="@+id/btn_dialog_save"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1.5"
+            android:text="LƯU CA VÀ TẮT GPS"
+            android:textStyle="bold"
+            android:backgroundTint="@color/accent_green" />
+    </LinearLayout>
+</LinearLayout>

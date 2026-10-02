@@ -12,8 +12,9 @@ data class Shift(
     val id: Long = 0,
     val date: String,             // yyyy-MM-dd
     val shiftName: String,        // "Ca 1 (Sáng)"
-    val startTime: String,        // "07:30"
-    val endTime: String,          // "11:45"
+    val startTime: String,        // "07:30:15"
+    val endTime: String,          // "11:45:20"
+    val durationSeconds: Long,    // Thời lượng chạy tính đến từng giây
     val distanceKm: Double,       // km
     val revenue: Long,            // Doanh thu (VNĐ)
     val fuelCost: Long,           // Tiền xăng (VNĐ)
@@ -25,6 +26,7 @@ data class DailySummary(
     val date: String,
     val shiftCount: Int,
     val totalDistanceKm: Double,
+    val totalDurationSeconds: Long,
     val totalRevenue: Long,
     val totalFuelCost: Long,
     val totalProfit: Long
@@ -46,7 +48,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         const val DATABASE_NAME = "shipper_tracker.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
 
         const val TABLE_SHIFTS = "shifts"
         const val TABLE_FUEL = "fuel_refills"
@@ -55,12 +57,13 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""
-            CREATE TABLE $TABLE_SHIFTS (
+            CREATE TABLE IF NOT EXISTS $TABLE_SHIFTS (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
                 shift_name TEXT NOT NULL,
                 start_time TEXT NOT NULL,
                 end_time TEXT NOT NULL,
+                duration_seconds INTEGER DEFAULT 0,
                 distance_km REAL NOT NULL,
                 revenue INTEGER NOT NULL,
                 fuel_cost INTEGER NOT NULL,
@@ -70,7 +73,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         """.trimIndent())
 
         db.execSQL("""
-            CREATE TABLE $TABLE_FUEL (
+            CREATE TABLE IF NOT EXISTS $TABLE_FUEL (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
                 time TEXT NOT NULL,
@@ -84,7 +87,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         """.trimIndent())
 
         db.execSQL("""
-            CREATE TABLE $TABLE_STATE (
+            CREATE TABLE IF NOT EXISTS $TABLE_STATE (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             )
@@ -95,7 +98,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Upgrade an toàn nếu cần
+        try {
+            db.execSQL("ALTER TABLE $TABLE_SHIFTS ADD COLUMN duration_seconds INTEGER DEFAULT 0")
+        } catch (e: Exception) {}
     }
 
     fun getTotalOdometer(): Double {
@@ -124,6 +129,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             put("shift_name", shift.shiftName)
             put("start_time", shift.startTime)
             put("end_time", shift.endTime)
+            put("duration_seconds", shift.durationSeconds)
             put("distance_km", shift.distanceKm)
             put("revenue", shift.revenue)
             put("fuel_cost", shift.fuelCost)
@@ -136,15 +142,24 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return id
     }
 
-    fun getTodayShiftCount(todayStr: String): Int {
+    fun getTodayStats(todayStr: String): Triple<Double, Long, Int> {
         val db = readableDatabase
-        val cursor = db.rawQuery("SELECT COUNT(*) FROM $TABLE_SHIFTS WHERE date = ?", arrayOf(todayStr))
+        val cursor = db.rawQuery("""
+            SELECT SUM(distance_km), SUM(duration_seconds), COUNT(*) 
+            FROM $TABLE_SHIFTS 
+            WHERE date = ?
+        """.trimIndent(), arrayOf(todayStr))
+        
+        var totalKm = 0.0
+        var totalSec = 0L
         var count = 0
         if (cursor.moveToFirst()) {
-            count = cursor.getInt(0)
+            totalKm = cursor.getDouble(0)
+            totalSec = cursor.getLong(1)
+            count = cursor.getInt(2)
         }
         cursor.close()
-        return count
+        return Triple(totalKm, totalSec, count)
     }
 
     fun getDailySummaries(): List<DailySummary> {
@@ -155,6 +170,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 date,
                 COUNT(*) as shift_count,
                 SUM(distance_km) as total_dist,
+                SUM(duration_seconds) as total_duration,
                 SUM(revenue) as total_rev,
                 SUM(fuel_cost) as total_fuel,
                 SUM(net_profit) as total_profit
@@ -171,9 +187,10 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                     date = cursor.getString(0),
                     shiftCount = cursor.getInt(1),
                     totalDistanceKm = cursor.getDouble(2),
-                    totalRevenue = cursor.getLong(3),
-                    totalFuelCost = cursor.getLong(4),
-                    totalProfit = cursor.getLong(5)
+                    totalDurationSeconds = cursor.getLong(3),
+                    totalRevenue = cursor.getLong(4),
+                    totalFuelCost = cursor.getLong(5),
+                    totalProfit = cursor.getLong(6)
                 )
             )
         }
@@ -189,6 +206,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             arrayOf(dateStr)
         )
         while (cursor.moveToNext()) {
+            val dur = try { cursor.getLong(cursor.getColumnIndexOrThrow("duration_seconds")) } catch(e: Exception) { 0L }
             list.add(
                 Shift(
                     id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
@@ -196,6 +214,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                     shiftName = cursor.getString(cursor.getColumnIndexOrThrow("shift_name")),
                     startTime = cursor.getString(cursor.getColumnIndexOrThrow("start_time")),
                     endTime = cursor.getString(cursor.getColumnIndexOrThrow("end_time")),
+                    durationSeconds = dur,
                     distanceKm = cursor.getDouble(cursor.getColumnIndexOrThrow("distance_km")),
                     revenue = cursor.getLong(cursor.getColumnIndexOrThrow("revenue")),
                     fuelCost = cursor.getLong(cursor.getColumnIndexOrThrow("fuel_cost")),
@@ -208,7 +227,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return list
     }
 
-    // --- CÁC HÀM XÓA DỮ LIỆU THEO YÊU CẦU ---
     fun deleteShiftsByDate(dateStr: String) {
         val db = writableDatabase
         db.delete(TABLE_SHIFTS, "date = ?", arrayOf(dateStr))
@@ -258,7 +276,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
         val now = Date()
         val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(now)
-        val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(now)
 
         val cv = ContentValues().apply {
             put("date", dateStr)
