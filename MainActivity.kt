@@ -759,100 +759,162 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun showEditShiftDialog(shift: Shift) {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_edit_shift, null)
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setCancelable(true)
-            .create()
+        val scrollView = android.widget.ScrollView(this)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(50, 40, 50, 40)
+            setBackgroundColor(android.graphics.Color.parseColor("#161C24"))
+        }
+        scrollView.addView(layout)
 
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        val etName = dialogView.findViewById<EditText>(R.id.edit_shift_name)
-        val etKm = dialogView.findViewById<EditText>(R.id.edit_shift_km)
-        val etMin = dialogView.findViewById<EditText>(R.id.edit_shift_duration_min)
-        val etRev = dialogView.findViewById<EditText>(R.id.edit_revenue)
-        val etFuel = dialogView.findViewById<EditText>(R.id.edit_fuel)
-        val etOther = dialogView.findViewById<EditText>(R.id.edit_other)
-        val btnCancel = dialogView.findViewById<Button>(R.id.btn_dialog_edit_cancel)
-        val btnSave = dialogView.findViewById<Button>(R.id.btn_dialog_edit_save)
-
-        etName.setText(shift.shiftName)
-        etKm.setText(String.format(Locale.US, "%.2f", shift.distanceKm))
-        etMin.setText((shift.durationSeconds / 60).toString())
-        etRev.setText(shift.revenue.toString())
-        etFuel.setText(shift.fuelCost.toString())
-        etOther.setText(shift.otherCost.toString())
-
-        btnCancel.setOnClickListener { dialog.dismiss() }
-
-        btnSave.setOnClickListener {
-            val name = etName.text.toString().trim().ifEmpty { shift.shiftName }
-            val km = etKm.text.toString().toDoubleOrNull() ?: shift.distanceKm
-            val min = etMin.text.toString().toLongOrNull() ?: (shift.durationSeconds / 60)
-            val rev = etRev.text.toString().toLongOrNull() ?: 0L
-            val fuel = etFuel.text.toString().toLongOrNull() ?: 0L
-            val other = etOther.text.toString().toLongOrNull() ?: 0L
-            val net = rev - fuel - other
-            val sec = min * 60
-
-            val updated = shift.copy(
-                shiftName = name,
-                distanceKm = km,
-                durationSeconds = sec,
-                revenue = rev,
-                fuelCost = fuel,
-                otherCost = other,
-                netProfit = net
-            )
-            dbHelper.updateShift(updated)
-            dialog.dismiss()
-            refreshTodayCenterMetrics()
-            loadDailyHistory()
-            Toast.makeText(this, "Đã cập nhật $name thành công!", Toast.LENGTH_SHORT).show()
+        fun createLabel(text: String): TextView {
+            return TextView(this).apply {
+                this.text = text
+                setTextColor(ContextCompat.getColor(context, R.color.text_muted))
+                textSize = 12f
+                setPadding(0, 16, 0, 6)
+            }
         }
 
-        dialog.show()
+        fun createInput(initialText: String, isNumber: Boolean = false, isDecimal: Boolean = false): EditText {
+            return EditText(this).apply {
+                setText(initialText)
+                setTextColor(ContextCompat.getColor(context, R.color.text_main))
+                setBackgroundResource(R.drawable.bg_input)
+                setPadding(24, 20, 24, 20)
+                textSize = 14f
+                if (isDecimal) {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+                } else if (isNumber) {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                }
+            }
+        }
+
+        layout.addView(createLabel("Tên ca chạy"))
+        val etName = createInput(shift.shiftName)
+        layout.addView(etName)
+
+        layout.addView(createLabel("Quãng đường (km)"))
+        val etKm = createInput(String.format(Locale.US, "%.2f", shift.distanceKm), isDecimal = true)
+        layout.addView(etKm)
+
+        layout.addView(createLabel("Thời gian chạy (phút)"))
+        val etMin = createInput((shift.durationSeconds / 60).toString(), isNumber = true)
+        layout.addView(etMin)
+
+        layout.addView(createLabel("Doanh thu cuốc xe (VNĐ)"))
+        val etRev = createInput(shift.revenue.toString(), isNumber = true)
+        layout.addView(etRev)
+
+        layout.addView(createLabel("Tiền xăng (VNĐ)"))
+        val etFuel = createInput(shift.fuelCost.toString(), isNumber = true)
+        layout.addView(etFuel)
+
+        layout.addView(createLabel("Chi phí khác (VNĐ)"))
+        val etOther = createInput(shift.otherCost.toString(), isNumber = true)
+        layout.addView(etOther)
+
+        AlertDialog.Builder(this)
+            .setTitle("✏️ Chỉnh sửa " + shift.shiftName)
+            .setView(scrollView)
+            .setPositiveButton("Cập nhật") { _, _ ->
+                val name = etName.text.toString().trim().ifEmpty { shift.shiftName }
+                val km = etKm.text.toString().toDoubleOrNull() ?: shift.distanceKm
+                val min = etMin.text.toString().toLongOrNull() ?: (shift.durationSeconds / 60)
+                val rev = etRev.text.toString().toLongOrNull() ?: 0L
+                val fuel = etFuel.text.toString().toLongOrNull() ?: 0L
+                val other = etOther.text.toString().toLongOrNull() ?: 0L
+                val net = rev - fuel - other
+                val sec = min * 60
+
+                val updated = shift.copy(
+                    shiftName = name,
+                    distanceKm = km,
+                    durationSeconds = sec,
+                    revenue = rev,
+                    fuelCost = fuel,
+                    otherCost = other,
+                    netProfit = net
+                )
+                dbHelper.updateShift(updated)
+                refreshTodayCenterMetrics()
+                loadDailyHistory()
+                Toast.makeText(this, "Đã cập nhật $name thành công!", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
     }
 
     private fun showEditFuelDialog(item: FuelRefill) {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_edit_fuel, null)
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setCancelable(true)
-            .create()
+        val scrollView = android.widget.ScrollView(this)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(50, 40, 50, 40)
+            setBackgroundColor(android.graphics.Color.parseColor("#161C24"))
+        }
+        scrollView.addView(layout)
 
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        val etDate = dialogView.findViewById<EditText>(R.id.edit_fuel_date)
-        val etTime = dialogView.findViewById<EditText>(R.id.edit_fuel_time)
-        val etAmount = dialogView.findViewById<EditText>(R.id.edit_fuel_amount)
-        val etPrice = dialogView.findViewById<EditText>(R.id.edit_fuel_price)
-        val etKmSince = dialogView.findViewById<EditText>(R.id.edit_fuel_km_since)
-        val btnCancel = dialogView.findViewById<Button>(R.id.btn_dialog_edit_fuel_cancel)
-        val btnSave = dialogView.findViewById<Button>(R.id.btn_dialog_edit_fuel_save)
-
-        etDate.setText(item.date)
-        etTime.setText(item.time)
-        etAmount.setText(item.amountPaid.toString())
-        etPrice.setText(item.fuelPrice.toString())
-        etKmSince.setText(String.format(Locale.US, "%.1f", item.kmSinceLast))
-
-        btnCancel.setOnClickListener { dialog.dismiss() }
-
-        btnSave.setOnClickListener {
-            val date = etDate.text.toString().trim().ifEmpty { item.date }
-            val time = etTime.text.toString().trim().ifEmpty { item.time }
-            val amount = etAmount.text.toString().toLongOrNull() ?: item.amountPaid
-            val price = etPrice.text.toString().toLongOrNull() ?: item.fuelPrice
-            val kmSince = etKmSince.text.toString().toDoubleOrNull() ?: item.kmSinceLast
-
-            dbHelper.updateFuelRefill(item.id, date, time, amount, price, kmSince)
-            dialog.dismiss()
-            loadFuelHistory()
-            Toast.makeText(this, "Đã cập nhật lần đổ xăng thành công!", Toast.LENGTH_SHORT).show()
+        fun createLabel(text: String): TextView {
+            return TextView(this).apply {
+                this.text = text
+                setTextColor(ContextCompat.getColor(context, R.color.text_muted))
+                textSize = 12f
+                setPadding(0, 16, 0, 6)
+            }
         }
 
-        dialog.show()
+        fun createInput(initialText: String, isNumber: Boolean = false, isDecimal: Boolean = false): EditText {
+            return EditText(this).apply {
+                setText(initialText)
+                setTextColor(ContextCompat.getColor(context, R.color.text_main))
+                setBackgroundResource(R.drawable.bg_input)
+                setPadding(24, 20, 24, 20)
+                textSize = 14f
+                if (isDecimal) {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+                } else if (isNumber) {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                }
+            }
+        }
+
+        layout.addView(createLabel("Ngày đổ (yyyy-MM-dd)"))
+        val etDate = createInput(item.date)
+        layout.addView(etDate)
+
+        layout.addView(createLabel("Giờ đổ (HH:mm:ss)"))
+        val etTime = createInput(item.time)
+        layout.addView(etTime)
+
+        layout.addView(createLabel("Số tiền đổ xăng (VNĐ)"))
+        val etAmount = createInput(item.amountPaid.toString(), isNumber = true)
+        layout.addView(etAmount)
+
+        layout.addView(createLabel("Giá xăng tại trạm (VNĐ/lít)"))
+        val etPrice = createInput(item.fuelPrice.toString(), isNumber = true)
+        layout.addView(etPrice)
+
+        layout.addView(createLabel("Số km chạy được từ lần trước (km)"))
+        val etKmSince = createInput(String.format(Locale.US, "%.1f", item.kmSinceLast), isDecimal = true)
+        layout.addView(etKmSince)
+
+        AlertDialog.Builder(this)
+            .setTitle("✏️ Sửa lần đổ xăng")
+            .setView(scrollView)
+            .setPositiveButton("Cập nhật") { _, _ ->
+                val date = etDate.text.toString().trim().ifEmpty { item.date }
+                val time = etTime.text.toString().trim().ifEmpty { item.time }
+                val amount = etAmount.text.toString().toLongOrNull() ?: item.amountPaid
+                val price = etPrice.text.toString().toLongOrNull() ?: item.fuelPrice
+                val kmSince = etKmSince.text.toString().toDoubleOrNull() ?: item.kmSinceLast
+
+                dbHelper.updateFuelRefill(item.id, date, time, amount, price, kmSince)
+                loadFuelHistory()
+                Toast.makeText(this, "Đã cập nhật lần đổ xăng thành công!", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
     }
 
     private fun formatSeconds(seconds: Long): String {
