@@ -7,11 +7,12 @@ import android.database.sqlite.SQLiteOpenHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 data class Shift(
     val id: Long = 0,
     val date: String,             // yyyy-MM-dd
-    val shiftName: String,        // "Ca 1"
+    val shiftName: String,        // "Ca 1 (Sáng)"
     val startTime: String,        // "07:30:15"
     val endTime: String,          // "11:45:20"
     val durationSeconds: Long,    // Thời lượng chạy tính đến từng giây
@@ -29,9 +30,14 @@ data class DailySummary(
     val totalDurationSeconds: Long,
     val totalRevenue: Long,
     val totalFuelCost: Long,
-    val totalProfit: Long,
-    val earningsPerHour: Long     // Thu nhập / giờ tính theo cả ngày
-)
+    val totalProfit: Long
+) {
+    val earningsPerHour: Long
+        get() {
+            val hours = totalDurationSeconds / 3600.0
+            return if (hours > 0.05) (totalProfit / hours).toLong() else 0L
+        }
+}
 
 data class FuelRefill(
     val id: Long = 0,
@@ -45,11 +51,33 @@ data class FuelRefill(
     val costPerKm: Double
 )
 
+object TimeUtils {
+    private val vnTimeZone = TimeZone.getTimeZone("Asia/Ho_Chi_Minh")
+
+    fun getTodayDate(): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+            timeZone = vnTimeZone
+        }.format(Date())
+    }
+
+    fun getDisplayDate(): String {
+        return SimpleDateFormat("dd/MM/yyyy", Locale.US).apply {
+            timeZone = vnTimeZone
+        }.format(Date())
+    }
+
+    fun getTimeNow(): String {
+        return SimpleDateFormat("HH:mm:ss", Locale.US).apply {
+            timeZone = vnTimeZone
+        }.format(Date())
+    }
+}
+
 class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
 
     companion object {
         const val DATABASE_NAME = "shipper_tracker.db"
-        const val DATABASE_VERSION = 4
+        const val DATABASE_VERSION = 3
 
         const val TABLE_SHIFTS = "shifts"
         const val TABLE_FUEL = "fuel_refills"
@@ -143,7 +171,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return id
     }
 
-    fun getTodayStats(todayStr: String): Triple<Double, Long, Int> {
+    // Luôn lấy thống kê theo chuẩn múi giờ Việt Nam
+    fun getTodayStats(todayStr: String = TimeUtils.getTodayDate()): Triple<Double, Long, Int> {
         val db = readableDatabase
         val cursor = db.rawQuery("""
             SELECT SUM(distance_km), SUM(duration_seconds), COUNT(*) 
@@ -183,25 +212,15 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
         val cursor = db.rawQuery(query, null)
         while (cursor.moveToNext()) {
-            val dist = cursor.getDouble(2)
-            val dur = cursor.getLong(3)
-            val rev = cursor.getLong(4)
-            val fuel = cursor.getLong(5)
-            val profit = cursor.getLong(6)
-
-            // Tính thu nhập / giờ theo cả ngày (VNĐ/h)
-            val earnPerHour = if (dur > 0) ((profit.toDouble() / dur) * 3600).toLong() else 0L
-
             list.add(
                 DailySummary(
                     date = cursor.getString(0),
                     shiftCount = cursor.getInt(1),
-                    totalDistanceKm = dist,
-                    totalDurationSeconds = dur,
-                    totalRevenue = rev,
-                    totalFuelCost = fuel,
-                    totalProfit = profit,
-                    earningsPerHour = earnPerHour
+                    totalDistanceKm = cursor.getDouble(2),
+                    totalDurationSeconds = cursor.getLong(3),
+                    totalRevenue = cursor.getLong(4),
+                    totalFuelCost = cursor.getLong(5),
+                    totalProfit = cursor.getLong(6)
                 )
             )
         }
@@ -238,7 +257,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return list
     }
 
-    // --- XÓA CA CHẠY (HOÀN TOÀN ĐỘC LẬP, KHÔNG CHẠM VÀO XĂNG) ---
     fun deleteShiftsByDate(dateStr: String) {
         val db = writableDatabase
         db.delete(TABLE_SHIFTS, "date = ?", arrayOf(dateStr))
@@ -268,7 +286,6 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         setTotalOdometer(total)
     }
 
-    // --- PHẦN XĂNG (ĐỘC LẬP HOÀN TOÀN, CÓ XÓA TỪNG LẦN HOẶC XÓA HẾT) ---
     fun recordFuelRefill(amount: Long, price: Long): FuelRefill {
         val db = writableDatabase
         val currentOdo = getTotalOdometer()
@@ -284,9 +301,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         val costKm = if (kmSince > 0) amount.toDouble() / kmSince else 0.0
         val liters = if (price > 0) amount.toDouble() / price else 0.0
 
-        val now = Date()
-        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(now)
-        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(now)
+        val dateStr = TimeUtils.getTodayDate()
+        val timeStr = TimeUtils.getTimeNow()
 
         val cv = ContentValues().apply {
             put("date", dateStr)
@@ -300,8 +316,10 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         }
         val id = db.insert(TABLE_FUEL, null, cv)
 
-        val cvUpdate = ContentValues().apply { put("value", currentOdo.toString()) }
-        db.update(TABLE_STATE, cvUpdate, "key = 'last_refill_km'", null)
+        val cvState = ContentValues().apply {
+            put("value", currentOdo.toString())
+        }
+        db.update(TABLE_STATE, cvState, "key = 'last_refill_km'", null)
 
         return FuelRefill(
             id = id,
@@ -319,7 +337,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     fun getAllFuelLogs(): List<FuelRefill> {
         val list = mutableListOf<FuelRefill>()
         val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM $TABLE_FUEL ORDER BY id DESC LIMIT 50", null)
+        val cursor = db.rawQuery("SELECT * FROM $TABLE_FUEL ORDER BY id DESC", null)
         while (cursor.moveToNext()) {
             list.add(
                 FuelRefill(
@@ -337,6 +355,49 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         }
         cursor.close()
         return list
+    }
+
+    fun updateShift(shift: Shift): Int {
+        val db = writableDatabase
+        val cv = ContentValues().apply {
+            put("date", shift.date)
+            put("shift_name", shift.shiftName)
+            put("start_time", shift.startTime)
+            put("end_time", shift.endTime)
+            put("duration_seconds", shift.durationSeconds)
+            put("distance_km", shift.distanceKm)
+            put("revenue", shift.revenue)
+            put("fuel_cost", shift.fuelCost)
+            put("other_cost", shift.otherCost)
+            put("net_profit", shift.netProfit)
+        }
+        val rows = db.update(TABLE_SHIFTS, cv, "id = ?", arrayOf(shift.id.toString()))
+        recalculateOdometer()
+        return rows
+    }
+
+    fun updateFuelRefill(
+        id: Long,
+        date: String,
+        time: String,
+        amount: Long,
+        price: Long,
+        kmSince: Double
+    ): Int {
+        val db = writableDatabase
+        val liters = if (price > 0) amount.toDouble() / price else 0.0
+        val costKm = if (kmSince > 0) amount.toDouble() / kmSince else 0.0
+
+        val cv = ContentValues().apply {
+            put("date", date)
+            put("time", time)
+            put("amount_paid", amount)
+            put("fuel_price", price)
+            put("liters", liters)
+            put("km_since_last", kmSince)
+            put("cost_per_km", costKm)
+        }
+        return db.update(TABLE_FUEL, cv, "id = ?", arrayOf(id.toString()))
     }
 
     fun deleteFuelById(id: Long) {

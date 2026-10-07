@@ -29,6 +29,15 @@ class GpsTrackingService : Service(), LocationListener {
     private var isServiceStarted = false
 
     companion object {
+        const val PREFS_NAME = "active_shift_prefs"
+        const val KEY_IS_RUNNING = "key_is_running"
+        const val KEY_IS_PAUSED = "key_is_paused"
+        const val KEY_IS_STANDBY = "key_is_standby"
+        const val KEY_SHIFT_NAME = "key_shift_name"
+        const val KEY_START_TIME = "key_start_time"
+        const val KEY_SHIFT_KM = "key_shift_km"
+        const val KEY_SHIFT_SEC = "key_shift_sec"
+
         const val CHANNEL_ID = "channel_shipper_gps_v2"
         const val NOTIFICATION_ID = 1001
 
@@ -40,6 +49,7 @@ class GpsTrackingService : Service(), LocationListener {
         const val ACTION_STOP = "com.shipper.tracker.ACTION_STOP"
 
         const val EXTRA_SHIFT_NAME = "extra_shift_name"
+        const val EXTRA_START_TIME = "extra_start_time"
         const val BROADCAST_LOCATION_UPDATE = "com.shipper.tracker.LOCATION_UPDATE"
         const val EXTRA_DISTANCE_KM = "extra_distance_km"
         const val EXTRA_SPEED_KMH = "extra_speed_kmh"
@@ -54,60 +64,92 @@ class GpsTrackingService : Service(), LocationListener {
         var currentShiftKm: Double = 0.0
         var currentShiftSeconds: Long = 0L
         var currentGpsStatus: String = "Đang kết nối GPS..."
+        var activeStartTime: String = ""
     }
 
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         createNotificationChannel()
+
+        // Khôi phục trạng thái ca nếu service được hệ thống tự động tái sinh (START_STICKY)
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_IS_RUNNING, false)) {
+            shiftName = prefs.getString(KEY_SHIFT_NAME, "Ca Chạy") ?: "Ca Chạy"
+            activeStartTime = prefs.getString(KEY_START_TIME, "") ?: ""
+            currentShiftKm = prefs.getFloat(KEY_SHIFT_KM, 0f).toDouble()
+            currentShiftSeconds = prefs.getLong(KEY_SHIFT_SEC, 0L)
+            isPaused = prefs.getBoolean(KEY_IS_PAUSED, false)
+            isStandby = prefs.getBoolean(KEY_IS_STANDBY, false)
+            isRunning = true
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action ?: return START_NOT_STICKY
+        val action = intent?.action ?: return START_STICKY
 
         when (action) {
             ACTION_START -> {
-                shiftName = intent.getStringExtra(EXTRA_SHIFT_NAME) ?: "Ca Chạy"
+                val newName = intent.getStringExtra(EXTRA_SHIFT_NAME) ?: "Ca Chạy"
+                val newStart = intent.getStringExtra(EXTRA_START_TIME) ?: ""
+                
+                // Nếu là ca mới tinh thì nhận tên và giờ mới
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val isAlreadyRunning = prefs.getBoolean(KEY_IS_RUNNING, false)
+                if (!isAlreadyRunning) {
+                    shiftName = newName
+                    activeStartTime = newStart
+                    currentShiftKm = 0.0
+                    currentShiftSeconds = 0L
+                } else {
+                    // Nếu đang phục hồi ca cũ bị vuốt app thì giữ nguyên số km và số giây!
+                    shiftName = prefs.getString(KEY_SHIFT_NAME, newName) ?: newName
+                    activeStartTime = prefs.getString(KEY_START_TIME, newStart) ?: newStart
+                    currentShiftKm = prefs.getFloat(KEY_SHIFT_KM, currentShiftKm.toFloat()).toDouble()
+                    currentShiftSeconds = prefs.getLong(KEY_SHIFT_SEC, currentShiftSeconds)
+                }
+                
                 startTracking()
             }
             ACTION_PAUSE -> {
-                // TẠM DỪNG: NGẮT GPS PHẦN CỨNG ĐỂ TẮT CHẤM XANH & TIẾT KIỆM PIN
                 isPaused = true
                 lastLocation = null
                 currentGpsStatus = "⏸ Đã tạm dừng (Đã ngắt GPS)"
+                persistState()
                 removeGpsUpdates()
                 updateNotification("⏸ Đang tạm dừng ca...")
                 broadcastUpdate(0f)
             }
             ACTION_RESUME -> {
-                // TIẾP TỤC: KẾT NỐI LẠI GPS PHẦN CỨNG NGAY LẬP TỨC
                 isPaused = false
                 lastLocation = null
                 currentGpsStatus = "🟢 Đang kết nối GPS 1s/lần..."
+                persistState()
                 requestGpsUpdates()
                 updateNotification("● Đang tiếp tục theo dõi 1s/lần...")
                 broadcastUpdate(0f)
             }
             ACTION_STANDBY -> {
-                // CHẾ ĐỘ CHỜ (VÀO QUÁN / CHỜ KHÁCH): NGẮT GPS 100%, ĐỒNG HỒ VẪN CHẠY
                 isStandby = true
                 lastLocation = null
                 currentGpsStatus = "☕ Chế độ chờ (Đã ngắt GPS, đồng hồ chạy)"
+                persistState()
                 removeGpsUpdates()
                 updateNotification("☕ Đang chế độ chờ (Đã tắt GPS, đồng hồ vẫn chạy)")
                 broadcastUpdate(0f)
             }
             ACTION_RESUME_STANDBY -> {
-                // TIẾP TỤC LĂN BÁNH: BẬT LẠI GPS 1S/LẦN
                 isStandby = false
                 lastLocation = null
                 currentGpsStatus = "🟢 Đang kết nối GPS 1s/lần..."
+                persistState()
                 requestGpsUpdates()
                 updateNotification("● Đang tiếp tục theo dõi 1s/lần...")
                 broadcastUpdate(0f)
             }
             ACTION_STOP -> {
-                stopTracking()
+                // CHỈ KHI NGƯỜI DÙNG BẤM KẾT THÚC CA MỚI XÓA DỮ LIỆU ĐANG CHẠY
+                explicitUserStop()
             }
         }
 
@@ -119,34 +161,33 @@ class GpsTrackingService : Service(), LocationListener {
         isServiceStarted = true
 
         isRunning = true
-        isPaused = false
-        isStandby = false
-        currentShiftKm = 0.0
-        currentShiftSeconds = 0L
-        lastLocation = null
-        currentGpsStatus = "🟢 Đang kết nối GPS 1s/lần..."
+        persistState()
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ShipperTracker:GpsWakeLock").apply {
-            acquire(12 * 60 * 60 * 1000L)
+            acquire(24 * 60 * 60 * 1000L)
         }
 
-        val notification = buildNotification("Bắt đầu ca: 0.00 km")
+        val notification = buildNotification(String.format("Đang chạy: %.2f km", currentShiftKm))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        requestGpsUpdates()
+        if (!isStandby && !isPaused) {
+            requestGpsUpdates()
+        }
 
-        // Timer thời gian ca chạy ngầm (chạy liên tục kể cả khi standby)
         timerThread = Thread {
             while (isRunning) {
                 try {
                     Thread.sleep(1000)
                     if (!isPaused) {
                         currentShiftSeconds++
+                        if (currentShiftSeconds % 3 == 0L) {
+                            persistState()
+                        }
                         broadcastUpdate(0f)
                     }
                 } catch (e: InterruptedException) {
@@ -157,10 +198,26 @@ class GpsTrackingService : Service(), LocationListener {
         timerThread?.start()
     }
 
-    // YÊU CẦU GPS TRỰC TIẾP TỪ PHẦN CỨNG ANDROID (HIỆN TRỰC TIẾP TRONG HOẠT ĐỘNG VỊ TRÍ)
+    private fun persistState() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean(KEY_IS_RUNNING, isRunning)
+            .putBoolean(KEY_IS_PAUSED, isPaused)
+            .putBoolean(KEY_IS_STANDBY, isStandby)
+            .putString(KEY_SHIFT_NAME, shiftName)
+            .putString(KEY_START_TIME, activeStartTime)
+            .putFloat(KEY_SHIFT_KM, currentShiftKm.toFloat())
+            .putLong(KEY_SHIFT_SEC, currentShiftSeconds)
+            .apply()
+    }
+
+    private fun clearPersistedState() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+    }
+
     private fun requestGpsUpdates() {
         try {
-            // 1. Kích hoạt trực tiếp GPS phần cứng vệ tinh (Android sẽ ghi nhận tên app và bật chấm xanh)
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
@@ -170,8 +227,6 @@ class GpsTrackingService : Service(), LocationListener {
                     Looper.getMainLooper()
                 )
             }
-
-            // 2. Kích hoạt mạng hỗ trợ (Network Provider) để khi ngồi trong nhà vẫn có tín hiệu định vị
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
@@ -195,7 +250,6 @@ class GpsTrackingService : Service(), LocationListener {
         } catch (e: Exception) {}
     }
 
-    // LocationListener callback: Nhận tọa độ trực tiếp
     override fun onLocationChanged(location: Location) {
         if (isPaused || isStandby) return
         processNewLocation(location)
@@ -205,7 +259,6 @@ class GpsTrackingService : Service(), LocationListener {
     override fun onProviderEnabled(provider: String) {}
     override fun onProviderDisabled(provider: String) {}
 
-    // THUẬT TOÁN TÍNH QUÃNG ĐƯỜNG: TỰ ĐỘNG KHÓA ĐÈN ĐỎ & ĐẾM CHUẨN 1S/LẦN
     private fun processNewLocation(newLoc: Location) {
         if (newLoc.hasAccuracy() && newLoc.accuracy > 40f) {
             currentGpsStatus = String.format("📡 Sóng yếu (Độ lệch ±%.0fm)", newLoc.accuracy)
@@ -235,15 +288,12 @@ class GpsTrackingService : Service(), LocationListener {
             return
         }
 
-        // TỰ ĐỘNG KHÓA KHI CHỜ ĐÈN ĐỎ / NGỒI TRONG NHÀ (Vận tốc < 2.5 km/h và cự ly < 2.5m)
         val instantSpeed = if (newLoc.hasSpeed()) (newLoc.speed * 3.6f) else speedKmh
         if (instantSpeed < 2.5f && distanceMeters < 2.5f) {
-            // Đang đứng yên / chờ đèn đỏ -> KHÓA CỨNG, KHÔNG CỘNG NHẢY ẢO
             broadcastUpdate(0f)
             return
         }
 
-        // Xe đang lăn bánh ngoài đường -> Cộng dồn ngay
         val deltaKm = distanceMeters / 1000.0
         currentShiftKm += deltaKm
         lastLocation = newLoc
@@ -266,12 +316,14 @@ class GpsTrackingService : Service(), LocationListener {
         sendBroadcast(intent)
     }
 
-    private fun stopTracking() {
+    // NGƯỜI DÙNG CHỦ ĐỘNG BẤM KẾT THÚC CA
+    private fun explicitUserStop() {
         isRunning = false
         isPaused = false
         isStandby = false
         isServiceStarted = false
 
+        clearPersistedState()
         removeGpsUpdates()
 
         if (wakeLock?.isHeld == true) {
@@ -284,6 +336,49 @@ class GpsTrackingService : Service(), LocationListener {
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    // KHI NGƯỜI DÙNG QUÊN BẤM KẾT THÚC, VUỐT XÓA ĐA NHIỆM APP ĐÓ LUÔN:
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // 1. Tự động lưu toàn bộ dữ liệu ca chạy hiện tại vào Database để không bị mất
+        if (isRunning && (currentShiftSeconds >= 10L || currentShiftKm >= 0.02)) {
+            try {
+                val dbHelper = com.shipper.tracker.data.DatabaseHelper(applicationContext)
+                val autoShift = com.shipper.tracker.data.Shift(
+                    date = com.shipper.tracker.data.TimeUtils.getTodayDate(),
+                    shiftName = shiftName,
+                    startTime = if (activeStartTime.isNotEmpty()) activeStartTime else com.shipper.tracker.data.TimeUtils.getTimeNow(),
+                    endTime = com.shipper.tracker.data.TimeUtils.getTimeNow(),
+                    durationSeconds = currentShiftSeconds,
+                    distanceKm = currentShiftKm,
+                    revenue = 0L,
+                    fuelCost = (currentShiftKm * 350).toLong(),
+                    otherCost = 0L,
+                    netProfit = -((currentShiftKm * 350).toLong())
+                )
+                dbHelper.insertShift(autoShift)
+            } catch (e: Exception) {}
+        }
+
+        // 2. Tắt hoàn toàn chạy ngầm và ngắt hẳn GPS 100% để không bị hao pin!
+        explicitUserStop()
+        super.onTaskRemoved(rootIntent)
+    }
+
+    // KHI HỆ THỐNG HUỶ SERVICE (DO THIẾU RAM HOẶC VUỐT APP):
+    override fun onDestroy() {
+        super.onDestroy()
+        // TUYỆT ĐỐI KHÔNG XÓA PREFS Ở ĐÂY! PHẢI LƯU LẠI ĐỂ PHỤC HỒI!
+        if (isRunning) {
+            persistState()
+        }
+        removeGpsUpdates()
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
+        wakeLock = null
+        timerThread?.interrupt()
+        timerThread = null
     }
 
     private fun createNotificationChannel() {
@@ -326,9 +421,4 @@ class GpsTrackingService : Service(), LocationListener {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onDestroy() {
-        super.onDestroy()
-        stopTracking()
-    }
 }

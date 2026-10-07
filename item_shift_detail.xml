@@ -32,13 +32,22 @@
             android:textSize="11sp" />
 
         <ImageButton
+            android:id="@+id/btn_edit_shift"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_edit"
+            android:contentDescription="Sửa ca này"
+            android:layout_marginStart="6dp" />
+
+        <ImageButton
             android:id="@+id/btn_delete_shift"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_delete"
             android:contentDescription="Xóa ca này"
-            android:layout_marginStart="6dp" />
+            android:layout_marginStart="4dp" />
     </LinearLayout>
 
     <LinearLayout

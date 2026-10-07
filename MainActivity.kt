@@ -31,9 +31,8 @@ import com.shipper.tracker.data.DailySummary
 import com.shipper.tracker.data.DatabaseHelper
 import com.shipper.tracker.data.FuelRefill
 import com.shipper.tracker.data.Shift
+import com.shipper.tracker.data.TimeUtils
 import com.shipper.tracker.service.GpsTrackingService
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 
@@ -80,12 +79,11 @@ class MainActivity : AppCompatActivity() {
     private var baseTodayKm: Double = 0.0
     private var baseTodaySeconds: Long = 0L
 
-    // Bộ hẹn giờ cập nhật đồng hồ trực tiếp trên màn hình từng giây
+    // Bộ hẹn giờ cập nhật UI trên màn hình (CHỈ ĐỌC, KHÔNG CỘNG TRÙNG VỚI SERVICE)
     private val uiTimerHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val uiTimerRunnable = object : Runnable {
         override fun run() {
-            if (GpsTrackingService.isRunning && !GpsTrackingService.isPaused) {
-                GpsTrackingService.currentShiftSeconds++
+            if (GpsTrackingService.isRunning) {
                 val currentTodayKm = baseTodayKm + GpsTrackingService.currentShiftKm
                 val currentTodaySec = baseTodaySeconds + GpsTrackingService.currentShiftSeconds
 
@@ -98,7 +96,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Broadcast nhận dữ liệu thời gian thực 1 giây/lần từ GPS Service
+    // Broadcast nhận dữ liệu thời gian thực 1 giây/lần từ GPS Service ngầm
     private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == GpsTrackingService.BROADCAST_LOCATION_UPDATE) {
@@ -149,6 +147,7 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         checkAndRequestPermissions()
         checkBatteryOptimization()
+        restorePersistedShiftIfNeeded()
         refreshTodayCenterMetrics()
         syncServiceState()
     }
@@ -161,6 +160,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             registerReceiver(locationReceiver, filter)
         }
+        restorePersistedShiftIfNeeded()
         refreshTodayCenterMetrics()
         syncServiceState()
         uiTimerHandler.post(uiTimerRunnable)
@@ -219,7 +219,7 @@ class MainActivity : AppCompatActivity() {
             loadFuelHistory()
         }
 
-        // BẮT ĐẦU CA: KIỂM TRA QUYỀN RỒI CHẠY NGAY
+        // BẮT ĐẦU CA: BẢO VỆ CA CŨ & CHẠY NGAY
         btnStartShift.setOnClickListener {
             startShiftInstantly()
         }
@@ -265,9 +265,35 @@ class MainActivity : AppCompatActivity() {
         btnTabFuel.setTextColor(ContextCompat.getColor(this, if (tab == 3) R.color.accent_blue else R.color.text_muted))
     }
 
+    private fun restorePersistedShiftIfNeeded() {
+        val prefs = getSharedPreferences(GpsTrackingService.PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(GpsTrackingService.KEY_IS_RUNNING, false)) {
+            activeShiftName = prefs.getString(GpsTrackingService.KEY_SHIFT_NAME, "Ca 1") ?: "Ca 1"
+            activeShiftStartTime = prefs.getString(GpsTrackingService.KEY_START_TIME, "") ?: ""
+            GpsTrackingService.currentShiftKm = prefs.getFloat(GpsTrackingService.KEY_SHIFT_KM, 0f).toDouble()
+            GpsTrackingService.currentShiftSeconds = prefs.getLong(GpsTrackingService.KEY_SHIFT_SEC, 0L)
+            GpsTrackingService.isPaused = prefs.getBoolean(GpsTrackingService.KEY_IS_PAUSED, false)
+            GpsTrackingService.isStandby = prefs.getBoolean(GpsTrackingService.KEY_IS_STANDBY, false)
+            GpsTrackingService.isRunning = true
+
+            // Khởi động lại service nền ngay nếu bị vuốt tắt app
+            val serviceIntent = Intent(this, GpsTrackingService::class.java).apply {
+                action = GpsTrackingService.ACTION_START
+                putExtra(GpsTrackingService.EXTRA_SHIFT_NAME, activeShiftName)
+                putExtra(GpsTrackingService.EXTRA_START_TIME, activeShiftStartTime)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        }
+    }
+
+    // Luôn tính toán theo Giờ Việt Nam chuẩn xác
     private fun refreshTodayCenterMetrics() {
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        val dateDisplay = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+        val todayStr = TimeUtils.getTodayDate()
+        val dateDisplay = TimeUtils.getDisplayDate()
         tvTodayDateBadge.text = "HÔM NAY: $dateDisplay"
 
         val stats = dbHelper.getTodayStats(todayStr)
@@ -275,8 +301,11 @@ class MainActivity : AppCompatActivity() {
         baseTodaySeconds = stats.second
         val completedCount = stats.third
 
-        tvTodayTotalKm.text = String.format(Locale.US, "%.2f", baseTodayKm)
-        tvTodayTotalDuration.text = formatSeconds(baseTodaySeconds)
+        val displayKm = if (GpsTrackingService.isRunning) baseTodayKm + GpsTrackingService.currentShiftKm else baseTodayKm
+        val displaySec = if (GpsTrackingService.isRunning) baseTodaySeconds + GpsTrackingService.currentShiftSeconds else baseTodaySeconds
+
+        tvTodayTotalKm.text = String.format(Locale.US, "%.2f", displayKm)
+        tvTodayTotalDuration.text = formatSeconds(displaySec)
         tvTodayShiftCompleted.text = "$completedCount ca xong"
 
         val totalOdo = dbHelper.getTotalOdometer()
@@ -314,7 +343,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 1 CHẠM BẮT ĐẦU CA: CÓ KIỂM TRA QUYỀN AN TOÀN TRƯỚC
+    // 1 CHẠM BẮT ĐẦU CA: TỰ ĐỘNG BẢO TOÀN CA CŨ NẾU QUÊN BẤM LƯU
     private fun startShiftInstantly() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "Vui lòng cấp quyền 'Vị trí chính xác' để bắt đầu ca!", Toast.LENGTH_LONG).show()
@@ -322,14 +351,38 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        // TỰ ĐỘNG LƯU PHỤC HỒI NẾU CÓ CA CŨ CHƯA KẾT THÚC (TRÁNH MẤT 24 PHÚT KHI QUÊN LƯU)
+        val oldKm = GpsTrackingService.currentShiftKm
+        val oldSec = GpsTrackingService.currentShiftSeconds
+        if (oldSec >= 60L || oldKm >= 0.05) {
+            val autoShift = Shift(
+                date = TimeUtils.getTodayDate(),
+                shiftName = activeShiftName,
+                startTime = if (activeShiftStartTime.isNotEmpty()) activeShiftStartTime else TimeUtils.getTimeNow(),
+                endTime = TimeUtils.getTimeNow(),
+                durationSeconds = oldSec,
+                distanceKm = oldKm,
+                revenue = 0L,
+                fuelCost = (oldKm * 350).toLong(),
+                otherCost = 0L,
+                netProfit = -((oldKm * 350).toLong())
+            )
+            dbHelper.insertShift(autoShift)
+            Toast.makeText(this, "Đã tự động bảo toàn thời gian của $activeShiftName!", Toast.LENGTH_SHORT).show()
+        }
+
+        refreshTodayCenterMetrics()
+
+        val todayStr = TimeUtils.getTodayDate()
         val count = dbHelper.getTodayStats(todayStr).third
         activeShiftName = "Ca ${count + 1}"
-        activeShiftStartTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        activeShiftStartTime = TimeUtils.getTimeNow()
 
         GpsTrackingService.isRunning = true
         GpsTrackingService.isPaused = false
         GpsTrackingService.isStandby = false
+        GpsTrackingService.currentShiftKm = 0.0
+        GpsTrackingService.currentShiftSeconds = 0L
         GpsTrackingService.currentGpsStatus = "🟢 Đang kết nối GPS phần cứng..."
 
         btnStartShift.visibility = View.GONE
@@ -347,6 +400,7 @@ class MainActivity : AppCompatActivity() {
         val serviceIntent = Intent(this, GpsTrackingService::class.java).apply {
             action = GpsTrackingService.ACTION_START
             putExtra(GpsTrackingService.EXTRA_SHIFT_NAME, activeShiftName)
+            putExtra(GpsTrackingService.EXTRA_START_TIME, activeShiftStartTime)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -355,7 +409,7 @@ class MainActivity : AppCompatActivity() {
             startService(serviceIntent)
         }
 
-        Toast.makeText(this, "Đã kích hoạt GPS phần cứng cho $activeShiftName!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Đã kích hoạt GPS cho $activeShiftName!", Toast.LENGTH_SHORT).show()
     }
 
     // 1 CHẠM BẬT / TẮT CHẾ ĐỘ CHỜ (NGẮT GPS PHẦN CỨNG 100%, ĐỒNG HỒ VẪN CHẠY)
@@ -383,7 +437,7 @@ class MainActivity : AppCompatActivity() {
             btnStandbyShift.text = "☕ CHẾ ĐỘ CHỜ (VÀO QUÁN / TẮT GPS)"
             btnStandbyShift.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_orange)
             tvActiveShiftTitle.text = "● ĐANG BẬT GPS: $activeShiftName"
-            tvGpsStatus.text = "🟢 Đang kết nối GPS 1s/lần..."
+            tvGpsStatus.text = "🟢 Đang kết nối GPS phần cứng..."
 
             val intent = Intent(this, GpsTrackingService::class.java).apply {
                 action = GpsTrackingService.ACTION_RESUME_STANDBY
@@ -393,7 +447,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 1 CHẠM TẠM DỪNG / TIẾP TỤC (CŨNG NGẮT / BẬT LẠI GPS PHẦN CỨNG)
+    // 1 CHẠM TẠM DỪNG / TIẾP TỤC
     private fun togglePauseInstantly() {
         if (GpsTrackingService.isPaused) {
             GpsTrackingService.isPaused = false
@@ -404,7 +458,7 @@ class MainActivity : AppCompatActivity() {
             startService(intent)
             btnPauseShift.text = "⏸ TẠM DỪNG"
             tvActiveShiftTitle.text = if (GpsTrackingService.isStandby) "☕ CHẾ ĐỘ CHỜ: $activeShiftName (ĐÃ TẮT GPS)" else "● ĐANG BẬT GPS: $activeShiftName"
-            tvGpsStatus.text = "🟢 Đang kết nối GPS 1s/lần..."
+            tvGpsStatus.text = "🟢 Đang kết nối GPS phần cứng..."
         } else {
             GpsTrackingService.isPaused = true
             GpsTrackingService.currentGpsStatus = "⏸ Đã tạm dừng (Đã ngắt GPS)"
@@ -455,8 +509,8 @@ class MainActivity : AppCompatActivity() {
             val other = etOther.text.toString().toLongOrNull() ?: 0L
             val net = rev - fuel - other
 
-            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            val endTimeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+            val todayStr = TimeUtils.getTodayDate()
+            val endTimeStr = TimeUtils.getTimeNow()
 
             val stopIntent = Intent(this, GpsTrackingService::class.java).apply {
                 action = GpsTrackingService.ACTION_STOP
@@ -638,6 +692,11 @@ class MainActivity : AppCompatActivity() {
                                 tvShiftProfit.setTextColor(ContextCompat.getColor(context, R.color.accent_red))
                             }
 
+                            // SỬA CA CHẠY
+                            shiftView.findViewById<ImageButton>(R.id.btn_edit_shift).setOnClickListener {
+                                showEditShiftDialog(shift)
+                            }
+
                             // XÓA RIÊNG TỪNG CA LẺ (KHÔNG ẢNH HƯỞNG ĐẾN XĂNG)
                             shiftView.findViewById<ImageButton>(R.id.btn_delete_shift).setOnClickListener {
                                 dbHelper.deleteShiftById(shift.id)
@@ -673,6 +732,11 @@ class MainActivity : AppCompatActivity() {
                 view.findViewById<TextView>(R.id.fuel_stats_km).text = String.format(Locale.US, "Chạy được: %.1f km (%.2f L)", item.kmSinceLast, item.liters)
                 view.findViewById<TextView>(R.id.fuel_cost_km).text = String.format(Locale.US, "~ %,.0f đ/km", item.costPerKm)
 
+                // NÚT SỬA LẦN ĐỔ XĂNG
+                view.findViewById<ImageButton>(R.id.btn_edit_fuel).setOnClickListener {
+                    showEditFuelDialog(item)
+                }
+
                 // NÚT XÓA RIÊNG TỪNG LẦN ĐỔ XĂNG
                 view.findViewById<ImageButton>(R.id.btn_delete_fuel).setOnClickListener {
                     AlertDialog.Builder(context)
@@ -691,6 +755,104 @@ class MainActivity : AppCompatActivity() {
             }
         }
         listFuelHistory.adapter = adapter
+    }
+
+
+    private fun showEditShiftDialog(shift: Shift) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_edit_shift, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val etName = dialogView.findViewById<EditText>(R.id.edit_shift_name)
+        val etKm = dialogView.findViewById<EditText>(R.id.edit_shift_km)
+        val etMin = dialogView.findViewById<EditText>(R.id.edit_shift_duration_min)
+        val etRev = dialogView.findViewById<EditText>(R.id.edit_revenue)
+        val etFuel = dialogView.findViewById<EditText>(R.id.edit_fuel)
+        val etOther = dialogView.findViewById<EditText>(R.id.edit_other)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btn_dialog_edit_cancel)
+        val btnSave = dialogView.findViewById<Button>(R.id.btn_dialog_edit_save)
+
+        etName.setText(shift.shiftName)
+        etKm.setText(String.format(Locale.US, "%.2f", shift.distanceKm))
+        etMin.setText((shift.durationSeconds / 60).toString())
+        etRev.setText(shift.revenue.toString())
+        etFuel.setText(shift.fuelCost.toString())
+        etOther.setText(shift.otherCost.toString())
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        btnSave.setOnClickListener {
+            val name = etName.text.toString().trim().ifEmpty { shift.shiftName }
+            val km = etKm.text.toString().toDoubleOrNull() ?: shift.distanceKm
+            val min = etMin.text.toString().toLongOrNull() ?: (shift.durationSeconds / 60)
+            val rev = etRev.text.toString().toLongOrNull() ?: 0L
+            val fuel = etFuel.text.toString().toLongOrNull() ?: 0L
+            val other = etOther.text.toString().toLongOrNull() ?: 0L
+            val net = rev - fuel - other
+            val sec = min * 60
+
+            val updated = shift.copy(
+                shiftName = name,
+                distanceKm = km,
+                durationSeconds = sec,
+                revenue = rev,
+                fuelCost = fuel,
+                otherCost = other,
+                netProfit = net
+            )
+            dbHelper.updateShift(updated)
+            dialog.dismiss()
+            refreshTodayCenterMetrics()
+            loadDailyHistory()
+            Toast.makeText(this, "Đã cập nhật $name thành công!", Toast.LENGTH_SHORT).show()
+        }
+
+        dialog.show()
+    }
+
+    private fun showEditFuelDialog(item: FuelRefill) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_edit_fuel, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val etDate = dialogView.findViewById<EditText>(R.id.edit_fuel_date)
+        val etTime = dialogView.findViewById<EditText>(R.id.edit_fuel_time)
+        val etAmount = dialogView.findViewById<EditText>(R.id.edit_fuel_amount)
+        val etPrice = dialogView.findViewById<EditText>(R.id.edit_fuel_price)
+        val etKmSince = dialogView.findViewById<EditText>(R.id.edit_fuel_km_since)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btn_dialog_edit_fuel_cancel)
+        val btnSave = dialogView.findViewById<Button>(R.id.btn_dialog_edit_fuel_save)
+
+        etDate.setText(item.date)
+        etTime.setText(item.time)
+        etAmount.setText(item.amountPaid.toString())
+        etPrice.setText(item.fuelPrice.toString())
+        etKmSince.setText(String.format(Locale.US, "%.1f", item.kmSinceLast))
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        btnSave.setOnClickListener {
+            val date = etDate.text.toString().trim().ifEmpty { item.date }
+            val time = etTime.text.toString().trim().ifEmpty { item.time }
+            val amount = etAmount.text.toString().toLongOrNull() ?: item.amountPaid
+            val price = etPrice.text.toString().toLongOrNull() ?: item.fuelPrice
+            val kmSince = etKmSince.text.toString().toDoubleOrNull() ?: item.kmSinceLast
+
+            dbHelper.updateFuelRefill(item.id, date, time, amount, price, kmSince)
+            dialog.dismiss()
+            loadFuelHistory()
+            Toast.makeText(this, "Đã cập nhật lần đổ xăng thành công!", Toast.LENGTH_SHORT).show()
+        }
+
+        dialog.show()
     }
 
     private fun formatSeconds(seconds: Long): String {

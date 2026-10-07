@@ -41,6 +41,7 @@
             android:name=".service.GpsTrackingService"
             android:enabled="true"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="location" />
 
     </application>

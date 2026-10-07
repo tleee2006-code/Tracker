@@ -33,6 +33,15 @@
             android:layout_marginEnd="6dp" />
 
         <ImageButton
+            android:id="@+id/btn_edit_fuel"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_edit"
+            android:contentDescription="Sửa lần đổ này"
+            android:layout_marginEnd="4dp" />
+
+        <ImageButton
             android:id="@+id/btn_delete_fuel"
             android:layout_width="32dp"
             android:layout_height="32dp"
